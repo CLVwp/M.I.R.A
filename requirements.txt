@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pyserial
+requests
+pydantic
+piper-tts

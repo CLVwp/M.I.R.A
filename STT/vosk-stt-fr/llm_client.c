@@ -3,15 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define DEFAULT_OLLAMA_URL "http://localhost:11434/api/generate"
+#define DEFAULT_ORCHESTRATOR_URL "http://localhost:5000/process"
 
-const char *get_ollama_url() {
-  const char *env_url = getenv("OLLAMA_URL");
+const char *get_orchestrator_url() {
+  const char *env_url = getenv("ORCHESTRATOR_URL");
   if (env_url)
     return env_url;
-  return DEFAULT_OLLAMA_URL;
+  return DEFAULT_ORCHESTRATOR_URL;
 }
-#define MODEL_NAME "mira" // Custom model created from Modelfile
 
 // Helper to escape special characters for JSON string in shell command
 // Very basic escaping for quotes and newlines
@@ -95,15 +94,12 @@ int send_to_llm(const char *prompt) {
   char escaped_prompt[4096]; // Max prompt length
   escape_json_string(escaped_prompt, prompt);
 
+  // Construct curl command hitting the Python FastAPI server
+  // The API expects JSON like: {"text": "the prompt"}
   char command[8192];
-  // Construct curl command
-  // We use single quotes for the JSON data to avoid shell expansion issues
-  // Note: This fails if prompt has single quotes. A robust implementation needs
-  // more complex escaping. For this demo, we assume relatively simple input.
   snprintf(command, sizeof(command),
-           "curl -s -X POST %s -d '{\"model\": \"%s\", \"prompt\": \"%s\", "
-           "\"stream\": false, \"keep_alive\": -1}'",
-           get_ollama_url(), MODEL_NAME, escaped_prompt);
+           "curl -s -X POST %s -H 'Content-Type: application/json' -d '{\"text\": \"%s\"}'",
+           get_orchestrator_url(), escaped_prompt);
 
   printf("[LLM] Sending query via curl...\n");
   printf("Command: %s\n", command); // Debug

@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  orchestrator:
+    build: .
+    container_name: mira-orchestrator
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./jeece_data:/app/jeece_data
+      - ./stt_module:/app/stt_module  # Pour le développement
+      # Optionnel: - /dev/ttyUSB0:/dev/ttyUSB0
+    environment:
+      - JEECE_DIR=/app/jeece_data
+      - SERIAL_PORT=/dev/ttyUSB0
+      - OLLAMA_URL=http://host.docker.internal:11434/api/generate  # Pour joindre ollama sur l'hôte host
+    networks:
+      - mira-network
+    # Privilèges nécessaires pour accéder au port série et à la carte son (alsa) 
+    privileged: true
+    devices:
+      - "/dev/snd:/dev/snd"
+
+  stt_client:
+    build: ./stt_module
+    container_name: mira-stt-mock
+    depends_on:
+      - orchestrator
+    networks:
+      - mira-network
+    # Sudo docker-compose up
+    # Le STT tape orchestrator:5000 grâce au bridge réseau !
+
+networks:
+  mira-network:
+    driver: bridge
