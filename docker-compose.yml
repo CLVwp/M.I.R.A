@@ -1,35 +1,85 @@
-version: '3.8'
-
 services:
-  orchestrator:
-    build: .
-    container_name: mira-orchestrator
+  # MQTT Broker
+  mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mira-mosquitto
     ports:
-      - "5000:5000"
-    volumes:
-      - ./jeece_data:/app/jeece_data
-      - ./stt_module:/app/stt_module  # Pour le développement
-      # Optionnel: - /dev/ttyUSB0:/dev/ttyUSB0
-    environment:
-      - JEECE_DIR=/app/jeece_data
-      - SERIAL_PORT=/dev/ttyUSB0
-      - OLLAMA_URL=http://host.docker.internal:11434/api/generate  # Pour joindre ollama sur l'hôte host
+      - "1883:1883"
     networks:
       - mira-network
-    # Privilèges nécessaires pour accéder au port série et à la carte son (alsa) 
+
+  # Ollama Engine
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mira-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./jeece_data/ollama_data:/root/.ollama
+      - ./STT/vosk-stt-fr/vosk-model-small-fr-0.22:/root/model_context
+    networks:
+      - mira-network
+
+  # Brique 1: Bridge (Orchestrateur & Matériel)
+  mira-bridge:
+    build: ./Bridge
+    container_name: mira-bridge
+    depends_on:
+      - mosquitto
+    environment:
+      - MQTT_HOST=mosquitto
+      - SERIAL_PORT=/dev/ttyUSB0
+    privileged: true
+    networks:
+      - mira-network
+
+  # Brique 2: LLM (Cerveau RAG & TTS)
+  mira-llm:
+    build: ./LLM
+    container_name: mira-llm
+    depends_on:
+      - mosquitto
+      - ollama
+    environment:
+      - MQTT_HOST=mosquitto
+      - OLLAMA_URL=http://ollama:11434/api/generate
+      - JEECE_DIR=/app/jeece_data
+    volumes:
+      - ./jeece_data:/app/jeece_data
     privileged: true
     devices:
       - "/dev/snd:/dev/snd"
-
-  stt_client:
-    build: ./stt_module
-    container_name: mira-stt-mock
-    depends_on:
-      - orchestrator
     networks:
       - mira-network
-    # Sudo docker-compose up
-    # Le STT tape orchestrator:5000 grâce au bridge réseau !
+
+  # Brique 3: STT (Speech-to-Text)
+  mira-stt:
+    build: ./STT/vosk-stt-fr
+    container_name: mira-stt
+    depends_on:
+      - mosquitto
+    environment:
+      - MQTT_HOST=mosquitto
+      - MQTT_TOPIC=mira/stt/output
+    privileged: true
+    devices:
+      - "/dev/snd:/dev/snd"
+    networks:
+      - mira-network
+
+  # Brique 4: Vision (Object Detection)
+  mira-vision:
+    build: ./Vision
+    container_name: mira-vision
+    depends_on:
+      - mosquitto
+    environment:
+      - MQTT_HOST=mosquitto
+    privileged: true
+    devices:
+      - "/dev/video0:/dev/video0"
+    networks:
+      - mira-network
 
 networks:
   mira-network:
