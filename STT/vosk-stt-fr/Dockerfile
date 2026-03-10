@@ -24,7 +24,7 @@ COPY . .
 RUN cp vosk-linux-aarch64-0.3.45/vosk-linux-aarch64-0.3.45/libvosk.so vosk-api/src/libvosk.so && \
     cp vosk-linux-aarch64-0.3.45/vosk-linux-aarch64-0.3.45/vosk_api.h vosk-api/src/vosk_api.h
 
-# Build the application
+# Build the application (clean first to remove any host-arch binaries)
 RUN make clean && make
 
 # Run the application

@@ -1,0 +1,4 @@
+*.o
+stt_app
+venv/
+__pycache__/
