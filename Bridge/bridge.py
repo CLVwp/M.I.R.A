@@ -56,7 +56,7 @@ class MiraBridge:
     def __init__(self):
         self.last_threat_time = 0
         self.threat_cooldown = 5
-        self.client = mqtt.Client()
+        self.client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         self.client.on_message = self.on_message
         self.client.connect(MQTT_BROKER, 1883, 60)
         self.client.subscribe([(TOPIC_STT, 0), (TOPIC_VISION, 0), (TOPIC_ROBOT, 0)])

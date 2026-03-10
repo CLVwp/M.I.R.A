@@ -24,9 +24,10 @@ model_path = hf_hub_download(repo_id=REPO_ID, filename=FILENAME)
 class MiraRobot:
     def __init__(self):
         self.model = YOLO(model_path)
-        self.mqtt_client = mqtt.Client()
+        self.mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         try:
-            self.mqtt_client.connect("localhost", 1883, 60)
+            mqtt_host = os.environ.get("MQTT_HOST", "mosquitto")
+            self.mqtt_client.connect(mqtt_host, 1883, 60)
             self.mqtt_connected = True
         except:
             self.mqtt_connected = False

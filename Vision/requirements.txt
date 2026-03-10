@@ -6,3 +6,4 @@ deepface
 opencv-python
 requests
 ultralytics
+paho-mqtt

@@ -21,7 +21,7 @@ WORKDIR /app
 COPY . .
 
 # Build the application
-RUN make
+RUN make clean && make
 
 # Run the application
 # Note: Audio device must be passed to container at runtime
