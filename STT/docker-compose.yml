@@ -1,0 +1,18 @@
+services:
+  mira-stt:
+    build:
+      context: .
+    container_name: mira-stt
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - "/dev/snd:/dev/snd"
+    environment:
+      - OLLAMA_URL=http://mira-ollama:11434/api/generate
+      - OLLAMA_MODEL=mira
+    networks:
+      - mira-network
+
+networks:
+  mira-network:
+    external: true

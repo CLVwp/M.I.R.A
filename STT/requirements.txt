@@ -1,0 +1,4 @@
+vosk
+sounddevice
+requests
+numpy

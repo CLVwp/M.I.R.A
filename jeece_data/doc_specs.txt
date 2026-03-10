@@ -1,1 +1,0 @@
-Le robot M.I.R.A possède 4 pattes et est équipé de capteurs lidar. Son autonomie est d'environ 2 heures.

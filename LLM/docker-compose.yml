@@ -1,0 +1,20 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mira-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+    volumes:
+      - ./ollama_data:/root/.ollama
+      - ./:/config
+    networks:
+      - mira-network
+
+networks:
+  mira-network:
+    name: mira-network
+    driver: bridge

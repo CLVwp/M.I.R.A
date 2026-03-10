@@ -1,1 +1,0 @@
-Pour initialiser les servomoteurs de mira, il faut configurer l'UART sur le baudrate 115200.

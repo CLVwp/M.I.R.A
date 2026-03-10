@@ -1,9 +1,0 @@
-tensorflow
-tf-keras
-mediapipe
-protobuf
-deepface
-opencv-python
-requests
-ultralytics
-paho-mqtt
