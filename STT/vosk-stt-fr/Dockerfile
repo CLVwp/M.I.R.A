@@ -20,6 +20,10 @@ WORKDIR /app
 # Copy source code
 COPY . .
 
+# Copy aarch64 library before building
+RUN cp vosk-linux-aarch64-0.3.45/vosk-linux-aarch64-0.3.45/libvosk.so vosk-api/src/libvosk.so && \
+    cp vosk-linux-aarch64-0.3.45/vosk-linux-aarch64-0.3.45/vosk_api.h vosk-api/src/vosk_api.h
+
 # Build the application
 RUN make clean && make
 
