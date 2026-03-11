@@ -61,6 +61,25 @@ services:
     depends_on:
       - mira-mosquitto
 
+  mira-tts:
+    build: ./TTS
+    container_name: mira-tts
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - "/dev/snd:/dev/snd"
+    environment:
+      - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+    volumes:
+      - /run/user/1000/pulse:/run/user/1000/pulse
+      - ~/.config/pulse/cookie:/root/.config/pulse/cookie:ro
+    networks:
+      - mira-network
+    depends_on:
+      - mira-mosquitto
+
 networks:
   mira-network:
     name: mira-network
