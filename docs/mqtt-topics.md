@@ -7,7 +7,7 @@ Convention : `{id}` = identifiant robot (ex. hostname).
 | Métadonnées | `mira/robots/{id}/meta` | `hostname`, `version`, `capabilities`, `streamUrl` (URL MJPEG/HLS/WebRTC), etc. (retained recommandé) |
 | Présence | `mira/robots/{id}/presence` | `{ "ts": number, "online"?: boolean }` + LWT hors ligne |
 | Télémétrie | `mira/robots/{id}/telemetry` | champs libres (batterie, IMU, etc.) |
-| GPS | `mira/robots/{id}/gps` | `{ "lat", "lon", "acc"?, "ts"? }` |
+| GPS | `mira/robots/{id}/gps` | `{ "lat", "lon", "acc"?, "ts"?, "mock"?, "fix"?, "satellites"? }` — `fix` / `satellites` renseignés par `mira-rpi-agent` en mode NMEA réel |
 | Micro / STT (Vosk) | `mira/robots/{id}/listening` | `{ "text": string, "ts": number, "source": "vosk" }` — transcription remontée au dashboard |
 | Docker (agent Pi) | `mira/robots/{id}/docker/status` | `{ "ts": number, "services": [ { "name": string, "running": boolean, "status": string } ], "error"?: string }` — état des conteneurs attendus sur le robot (périodique, ex. toutes les 30 s) |
 | Ordres (nouveau) | `mira/robots/{id}/bridge/ordres` | `{"action":"avance"}` (même contrat que le bridge historique) |

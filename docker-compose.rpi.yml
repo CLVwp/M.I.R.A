@@ -25,8 +25,15 @@ services:
       - MQTT_PORT=1883
       - ROBOT_ID=${ROBOT_ID:-mira-robot}
       - MOCK_GPS=${MOCK_GPS:-1}
+      - LAT=${LAT:-48.869867}
+      - LON=${LON:-2.307077}
+      - GPS_SERIAL=${GPS_SERIAL:-}
+      - GPS_BAUD=${GPS_BAUD:-9600}
       - STREAM_URL=${RPI_STREAM_URL:-}
       - ROBOT_DOCKER_CONTAINERS=mira-stt,mira-tts,mira-vision,mira-bridge,mira-mosquitto
+    # GPS USB (CP2102 → souvent ttyUSB0). Sans dongle : commenter + MOCK_GPS=1 dans .env
+    devices:
+      - /dev/ttyUSB0:/dev/gps0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:

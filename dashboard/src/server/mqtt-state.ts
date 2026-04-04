@@ -6,7 +6,15 @@ export type RobotSnapshot = {
   meta: Record<string, unknown> | null;
   presence: { ts: number; online?: boolean } | null;
   telemetry: Record<string, unknown> | null;
-  gps: { lat: number; lon: number; acc?: number; ts?: number } | null;
+  gps: {
+    lat: number;
+    lon: number;
+    acc?: number;
+    ts?: number;
+    mock?: boolean;
+    fix?: boolean;
+    satellites?: number;
+  } | null;
   /** Dernière transcription micro robot (Vosk → topic listening) */
   listening: { text: string; ts: number; source?: string } | null;
   /** Rapport Docker publié par l’agent sur le robot (topic docker/status) */
@@ -129,7 +137,15 @@ export function startMqtt(): void {
         r.presence = data as { ts: number; online?: boolean };
       if (parsed.channel === "telemetry") r.telemetry = data as Record<string, unknown>;
       if (parsed.channel === "gps") {
-        const g = data as { lat: number; lon: number; acc?: number; ts?: number };
+        const g = data as {
+          lat: number;
+          lon: number;
+          acc?: number;
+          ts?: number;
+          mock?: boolean;
+          fix?: boolean;
+          satellites?: number;
+        };
         r.gps = g;
       }
       if (parsed.channel === "listening") {

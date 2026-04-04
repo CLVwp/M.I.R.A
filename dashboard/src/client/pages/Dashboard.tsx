@@ -9,7 +9,15 @@ type RobotSnap = {
   meta: Record<string, unknown> | null;
   presence: { ts: number; online?: boolean } | null;
   telemetry: Record<string, unknown> | null;
-  gps: { lat: number; lon: number; acc?: number; ts?: number } | null;
+  gps: {
+    lat: number;
+    lon: number;
+    acc?: number;
+    ts?: number;
+    mock?: boolean;
+    fix?: boolean;
+    satellites?: number;
+  } | null;
   listening: { text: string; ts: number; source?: string } | null;
   dockerStatus?: {
     ts: number;
@@ -255,6 +263,31 @@ export function DashboardPage() {
             <p className="muted small sidebar-hint">
               La transcription micro s’affiche au centre (panneau dédié).
             </p>
+            <h3>GPS</h3>
+            {selected.gps ? (
+              <dl className="gps-summary muted small">
+                <dt>Position</dt>
+                <dd>
+                  {selected.gps.lat.toFixed(6)}, {selected.gps.lon.toFixed(6)}
+                </dd>
+                {selected.gps.mock ? (
+                  <dd className="gps-summary__note">Simulé (MOCK_GPS)</dd>
+                ) : (
+                  <>
+                    <dt>Fix</dt>
+                    <dd>{selected.gps.fix === false ? "non" : "oui"}</dd>
+                    {selected.gps.satellites != null && (
+                      <>
+                        <dt>Satellites</dt>
+                        <dd>{selected.gps.satellites}</dd>
+                      </>
+                    )}
+                  </>
+                )}
+              </dl>
+            ) : (
+              <p className="muted small">Aucune donnée GPS (topic MQTT)</p>
+            )}
             <h3>Télémétrie</h3>
             <pre className="telemetry">
               {JSON.stringify(selected.telemetry ?? {}, null, 2)}
@@ -278,7 +311,32 @@ export function DashboardPage() {
                     click: () => setSelectedId(r.id),
                   }}
                 >
-                  <Popup>{r.id}</Popup>
+                  <Popup>
+                    <strong>{r.id}</strong>
+                    <br />
+                    {r.gps!.lat.toFixed(5)}, {r.gps!.lon.toFixed(5)}
+                    {r.gps!.mock ? (
+                      <>
+                        <br />
+                        <span className="muted">simulé</span>
+                      </>
+                    ) : (
+                      <>
+                        {r.gps!.satellites != null && (
+                          <>
+                            <br />
+                            {r.gps!.satellites} sat.
+                          </>
+                        )}
+                        {r.gps!.fix === false && (
+                          <>
+                            <br />
+                            <span className="muted">pas de fix</span>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </Popup>
                 </Marker>
               ))}
           </MapContainer>
