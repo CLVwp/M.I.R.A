@@ -9,11 +9,13 @@ Convention : `{id}` = identifiant robot (ex. hostname).
 | Télémétrie | `mira/robots/{id}/telemetry` | champs libres (batterie, IMU, etc.) |
 | GPS | `mira/robots/{id}/gps` | `{ "lat", "lon", "acc"?, "ts"?, "mock"?, "fix"?, "satellites"? }` — `fix` / `satellites` renseignés par `mira-rpi-agent` en mode NMEA réel |
 | Micro / STT (Vosk) | `mira/robots/{id}/listening` | `{ "text": string, "ts": number, "source": "vosk" }` — transcription remontée au dashboard |
+| Vision (IMX500) | `mira/robots/{id}/vision/text` | `{ "text": string, "ts": number, "source": "imx500" }` — phrase FR décrivant les objets COCO détectés (dashboard + contexte LLM) |
+| Vision (legacy) | `mira/vision/output` | texte brut (même phrase) — le dashboard l’associe au robot `MQTT_LEGACY_VISION_ROBOT_ID` (défaut `mira-robot`) si le topic robot n’est pas utilisé |
 | Docker (agent Pi) | `mira/robots/{id}/docker/status` | `{ "ts": number, "services": [ { "name": string, "running": boolean, "status": string } ], "error"?: string }` — état des conteneurs attendus sur le robot (périodique, ex. toutes les 30 s) |
 | Ordres (nouveau) | `mira/robots/{id}/bridge/ordres` | `{"action":"avance"}` (même contrat que le bridge historique) |
 | Ordres (historique) | `mira/bridge/ordres` | idem ; le dashboard publie aussi ici pour compatibilité mono-robot |
 
-Vision texte existante : `mira/vision/output` — à préfixer par robot en multi-unités (`mira/robots/{id}/vision/text`).
+Publication vision : **`mira/robots/{id}/vision/text`** (JSON) + **`mira/vision/output`** (texte brut, rétrocompat).
 
 Flux vidéo (dashboard) : le conteneur **`mira-vision`** peut servir un **MJPEG** sur `http://<IP_PI>:8080/stream` (voir `STREAM_MJPEG_*` dans `vision.py`) ; l’URL doit être copiée dans **`RPI_STREAM_URL`** (meta MQTT via `mira-rpi-agent`).
 

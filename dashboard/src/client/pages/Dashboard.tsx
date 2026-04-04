@@ -19,6 +19,7 @@ type RobotSnap = {
     satellites?: number;
   } | null;
   listening: { text: string; ts: number; source?: string } | null;
+  vision: { text: string; ts: number; source?: string } | null;
   dockerStatus?: {
     ts: number;
     services: Array<{ name: string; running: boolean; status?: string }>;
@@ -46,12 +47,10 @@ type LocalDockerPayload = {
 };
 
 const icon = L.icon({
-  iconUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+  iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   iconRetinaUrl:
     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-  shadowUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+  shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
 });
@@ -138,10 +137,9 @@ export function DashboardPage() {
 
   const robotDockerRows = useMemo(() => {
     const labels = containersCfg?.labels ?? {};
-    const order =
-      containersCfg?.onRobot?.length
-        ? containersCfg.onRobot
-        : (selected?.dockerStatus?.services.map((s) => s.name) ?? []);
+    const order = containersCfg?.onRobot?.length
+      ? containersCfg.onRobot
+      : (selected?.dockerStatus?.services.map((s) => s.name) ?? []);
     return order.map((name) => {
       const s = selected?.dockerStatus?.services.find((x) => x.name === name);
       return {
@@ -155,7 +153,10 @@ export function DashboardPage() {
 
   return (
     <div className="dashboard-page-wrap">
-      <section className="docker-health" aria-label="État des conteneurs Docker">
+      <section
+        className="docker-health"
+        aria-label="État des conteneurs Docker"
+      >
         <div className="docker-health__col">
           <h3 className="docker-health__title">Ce PC (dashboard)</h3>
           {!localDocker.ok && localDocker.error && (
@@ -179,7 +180,9 @@ export function DashboardPage() {
               </li>
             ))}
             {localDocker.services.length === 0 && (
-              <li className="muted small">Chargement ou Docker indisponible…</li>
+              <li className="muted small">
+                Chargement ou Docker indisponible…
+              </li>
             )}
           </ul>
         </div>
@@ -197,9 +200,7 @@ export function DashboardPage() {
             <p className="muted small">
               Aucun rapport Docker MQTT encore (agent Pi avec{" "}
               <code>DOCKER_REPORT_SEC</code> / topic{" "}
-              <code>
-                mira/robots/{selected.id}/docker/status
-              </code>
+              <code>mira/robots/{selected.id}/docker/status</code>
               ).
             </p>
           )}
@@ -224,168 +225,203 @@ export function DashboardPage() {
         </div>
       </section>
       <div className="dashboard dashboard-3col">
-      <aside className="sidebar">
-        <h2>Robots</h2>
-        <ul className="robot-list">
-          {robots.map((r) => (
-            <li key={r.id}>
-              <button
-                type="button"
-                className={r.id === selectedId ? "robot active" : "robot"}
-                onClick={() => setSelectedId(r.id)}
-              >
-                {r.id}
-                <span className="muted small">
-                  {r.presence?.online === false ? "hors ligne" : "vu récemment"}
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-        {selected && (
-          <div className="panel">
-            <h3>Commande MQTT</h3>
-            <select
-              value={commandAction}
-              onChange={(e) => setCommandAction(e.target.value)}
-            >
-              <option value="avance">avance</option>
-              <option value="recule">recule</option>
-              <option value="gauche">gauche</option>
-              <option value="droite">droite</option>
-              <option value="stop">stop</option>
-              <option value="autopilot">autopilot</option>
-              <option value="position">position</option>
-            </select>
-            <button type="button" onClick={() => void sendCommand()}>
-              Envoyer
-            </button>
-            <p className="muted small sidebar-hint">
-              La transcription micro s’affiche au centre (panneau dédié).
-            </p>
-            <h3>GPS</h3>
-            {selected.gps ? (
-              <dl className="gps-summary muted small">
-                <dt>Position</dt>
-                <dd>
-                  {selected.gps.lat.toFixed(6)}, {selected.gps.lon.toFixed(6)}
-                </dd>
-                {selected.gps.mock ? (
-                  <dd className="gps-summary__note">Simulé (MOCK_GPS)</dd>
-                ) : (
-                  <>
-                    <dt>Fix</dt>
-                    <dd>{selected.gps.fix === false ? "non" : "oui"}</dd>
-                    {selected.gps.satellites != null && (
-                      <>
-                        <dt>Satellites</dt>
-                        <dd>{selected.gps.satellites}</dd>
-                      </>
-                    )}
-                  </>
-                )}
-              </dl>
-            ) : (
-              <p className="muted small">Aucune donnée GPS (topic MQTT)</p>
-            )}
-            <h3>Télémétrie</h3>
-            <pre className="telemetry">
-              {JSON.stringify(selected.telemetry ?? {}, null, 2)}
-            </pre>
-          </div>
-        )}
-      </aside>
-      <section className="dashboard-center">
-        <div className="map-section">
-          <h3 className="section-title">Carte GPS</h3>
-          <MapContainer center={center} zoom={13} className="map">
-            <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-            {robots
-              .filter((r) => r.gps)
-              .map((r) => (
-                <Marker
-                  key={r.id}
-                  position={[r.gps!.lat, r.gps!.lon]}
-                  icon={icon}
-                  eventHandlers={{
-                    click: () => setSelectedId(r.id),
-                  }}
+        <aside className="sidebar">
+          <h2>Robots</h2>
+          <ul className="robot-list">
+            {robots.map((r) => (
+              <li key={r.id}>
+                <button
+                  type="button"
+                  className={r.id === selectedId ? "robot active" : "robot"}
+                  onClick={() => setSelectedId(r.id)}
                 >
-                  <Popup>
-                    <strong>{r.id}</strong>
-                    <br />
-                    {r.gps!.lat.toFixed(5)}, {r.gps!.lon.toFixed(5)}
-                    {r.gps!.mock ? (
-                      <>
-                        <br />
-                        <span className="muted">simulé</span>
-                      </>
-                    ) : (
-                      <>
-                        {r.gps!.satellites != null && (
-                          <>
-                            <br />
-                            {r.gps!.satellites} sat.
-                          </>
-                        )}
-                        {r.gps!.fix === false && (
-                          <>
-                            <br />
-                            <span className="muted">pas de fix</span>
-                          </>
-                        )}
-                      </>
-                    )}
-                  </Popup>
-                </Marker>
-              ))}
-          </MapContainer>
-        </div>
-        <div className="transcription-dedicated" aria-live="polite">
-          <div className="transcription-dedicated__header">
-            <span className="transcription-dedicated__label">
-              Transcription micro
-            </span>
-            {selected && (
-              <span className="transcription-dedicated__robot">
-                {selected.id}
+                  {r.id}
+                  <span className="muted small">
+                    {r.presence?.online === false
+                      ? "hors ligne"
+                      : "vu récemment"}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+          {selected && (
+            <div className="panel">
+              <h3>Commande MQTT</h3>
+              <select
+                value={commandAction}
+                onChange={(e) => setCommandAction(e.target.value)}
+              >
+                <option value="avance">avance</option>
+                <option value="recule">recule</option>
+                <option value="gauche">gauche</option>
+                <option value="droite">droite</option>
+                <option value="stop">stop</option>
+                <option value="autopilot">autopilot</option>
+                <option value="position">position</option>
+              </select>
+              <button type="button" onClick={() => void sendCommand()}>
+                Envoyer
+              </button>
+              <p className="muted small sidebar-hint">
+                La transcription micro s’affiche au centre (panneau dédié).
+              </p>
+              <h3>GPS</h3>
+              {selected.gps ? (
+                <dl className="gps-summary muted small">
+                  <dt>Position</dt>
+                  <dd>
+                    {selected.gps.lat.toFixed(6)}, {selected.gps.lon.toFixed(6)}
+                  </dd>
+                  {selected.gps.mock ? (
+                    <dd className="gps-summary__note">Simulé (MOCK_GPS)</dd>
+                  ) : (
+                    <>
+                      <dt>Fix</dt>
+                      <dd>{selected.gps.fix === false ? "non" : "oui"}</dd>
+                      {selected.gps.satellites != null && (
+                        <>
+                          <dt>Satellites</dt>
+                          <dd>{selected.gps.satellites}</dd>
+                        </>
+                      )}
+                    </>
+                  )}
+                </dl>
+              ) : (
+                <p className="muted small">Aucune donnée GPS (topic MQTT)</p>
+              )}
+              <h3>Télémétrie</h3>
+              <pre className="telemetry">
+                {JSON.stringify(selected.telemetry ?? {}, null, 2)}
+              </pre>
+            </div>
+          )}
+        </aside>
+        <section className="dashboard-center">
+          <div className="map-section">
+            <h3 className="section-title">Carte GPS</h3>
+            <MapContainer center={center} zoom={13} className="map">
+              <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+              {robots
+                .filter((r) => r.gps)
+                .map((r) => (
+                  <Marker
+                    key={r.id}
+                    position={[r.gps!.lat, r.gps!.lon]}
+                    icon={icon}
+                    eventHandlers={{
+                      click: () => setSelectedId(r.id),
+                    }}
+                  >
+                    <Popup>
+                      <strong>{r.id}</strong>
+                      <br />
+                      {r.gps!.lat.toFixed(5)}, {r.gps!.lon.toFixed(5)}
+                      {r.gps!.mock ? (
+                        <>
+                          <br />
+                          <span className="muted">simulé</span>
+                        </>
+                      ) : (
+                        <>
+                          {r.gps!.satellites != null && (
+                            <>
+                              <br />
+                              {r.gps!.satellites} sat.
+                            </>
+                          )}
+                          {r.gps!.fix === false && (
+                            <>
+                              <br />
+                              <span className="muted">pas de fix</span>
+                            </>
+                          )}
+                        </>
+                      )}
+                    </Popup>
+                  </Marker>
+                ))}
+            </MapContainer>
+          </div>
+          <div className="transcription-dedicated" aria-live="polite">
+            <div className="transcription-dedicated__header">
+              <span className="transcription-dedicated__label">
+                Transcription micro
               </span>
+              {selected && (
+                <span className="transcription-dedicated__robot">
+                  {selected.id}
+                </span>
+              )}
+            </div>
+            {selected?.listening?.text ? (
+              <>
+                <p className="transcription-dedicated__text">
+                  {selected.listening.text}
+                </p>
+                <div className="transcription-dedicated__meta">
+                  {selected.listening.source === "vosk" ? "Vosk · " : ""}
+                  {new Date(
+                    (selected.listening.ts ?? 0) * 1000,
+                  ).toLocaleString()}
+                </div>
+              </>
+            ) : (
+              <p className="transcription-dedicated__empty muted">
+                Aucune phrase reçue pour ce robot. Vérifiez le service STT sur
+                la Pi et le topic MQTT{" "}
+                <code>mira/robots/{selected?.id ?? "…"}/listening</code>.
+              </p>
             )}
           </div>
-          {selected?.listening?.text ? (
-            <>
-              <p className="transcription-dedicated__text">
-                {selected.listening.text}
+          <div className="transcription-dedicated" aria-live="polite">
+            <div className="transcription-dedicated__header">
+              <span className="transcription-dedicated__label">
+                Vision caméra (détections)
+              </span>
+              {selected && (
+                <span className="transcription-dedicated__robot">
+                  {selected.id}
+                </span>
+              )}
+            </div>
+            {selected?.vision?.text ? (
+              <>
+                <p className="transcription-dedicated__text">
+                  {selected.vision.text}
+                </p>
+                <div className="transcription-dedicated__meta">
+                  {selected.vision.source ? `${selected.vision.source} · ` : ""}
+                  {new Date(
+                    (selected.vision.ts ?? 0) * 1000,
+                  ).toLocaleString()}
+                </div>
+              </>
+            ) : (
+              <p className="transcription-dedicated__empty muted">
+                Aucune détection récente. Vérifiez mira-vision sur la Pi (topic{" "}
+                <code>
+                  mira/robots/{selected?.id ?? "…"}/vision/text
+                </code>
+                ).
               </p>
-              <div className="transcription-dedicated__meta">
-                {selected.listening.source === "vosk" ? "Vosk · " : ""}
-                {new Date(
-                  (selected.listening.ts ?? 0) * 1000,
-                ).toLocaleString()}
-              </div>
-            </>
-          ) : (
-            <p className="transcription-dedicated__empty muted">
-              Aucune phrase reçue pour ce robot. Vérifiez le service STT sur la
-              Pi et le topic MQTT{" "}
-              <code>mira/robots/{selected?.id ?? "…"}/listening</code>.
-            </p>
-          )}
-        </div>
-        <div className="video-panel video-panel--center">
-          <h3 className="section-title">Flux vidéo</h3>
-          {streamUrl ? (
-            <iframe title="stream" src={streamUrl} className="video-frame" />
-          ) : (
-            <p className="muted video-placeholder">
-              Aucune URL (champ <code>streamUrl</code> dans meta MQTT)
-            </p>
-          )}
-        </div>
-      </section>
-      <aside className="chat-column">
-        <ChatPage embedded />
-      </aside>
+            )}
+          </div>
+          <div className="video-panel video-panel--center">
+            <h3 className="section-title">Flux vidéo</h3>
+            {streamUrl ? (
+              <iframe title="stream" src={streamUrl} className="video-frame" />
+            ) : (
+              <p className="muted video-placeholder">
+                Aucune URL (champ <code>streamUrl</code> dans meta MQTT)
+              </p>
+            )}
+          </div>
+        </section>
+        <aside className="chat-column">
+          <ChatPage embedded robotId={selectedId} />
+        </aside>
       </div>
     </div>
   );

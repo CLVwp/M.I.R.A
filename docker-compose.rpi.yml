@@ -74,6 +74,8 @@ services:
       - /sys/kernel/debug:/sys/kernel/debug
     environment:
       - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - ROBOT_ID=${ROBOT_ID:-mira-robot}
       - STREAM_MJPEG_ENABLE=${STREAM_MJPEG_ENABLE:-1}
       - STREAM_MJPEG_PORT=8080
       - STREAM_FRAME_MIN_INTERVAL_SEC=${STREAM_FRAME_MIN_INTERVAL_SEC:-0.04}

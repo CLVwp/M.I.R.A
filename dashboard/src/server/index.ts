@@ -11,7 +11,43 @@ import {
   startMqtt,
   subscribe,
   publishCommand,
+  formatRobotContextForLlm,
 } from "./mqtt-state";
+import {
+  reverseGeocodeCached,
+  shouldReverseGeocodeGps,
+} from "./reverse-geocode";
+
+const CHAT_SYSTEM_PREAMBLE = `Tu es l’assistant M.I.R.A. Tu réponds en français, de façon claire et concise.
+Le serveur t’injecte ci-dessous des données temps réel issues de MQTT (robot(s) M.I.R.A).
+Appuie-toi sur ces données pour : position / lieu, télémétrie, état Docker, ce que dit la caméra (résumé textuel des détections), ce qu’a entendu le micro du robot (Vosk sur la Pi — distinct du micro navigateur), et l’URL du flux vidéo MJPEG (tu ne vois pas les pixels, seulement le texte décrivant les objets détectés).
+Ne dis pas que tu es un assistant « sans accès » aux capteurs : tu reçois ces valeurs à chaque message. Si une information manque ou est ambiguë, dis-le honnêtement.
+Si un « lieu lisible » (Nominatim) est fourni, utilise-le pour rue / quartier / ville ; en France la longitude est le plus souvent positive (Est).`;
+
+async function buildMqttBlockForChat(robotId?: string): Promise<string> {
+  if (robotId) {
+    const rob = getRobot(robotId);
+    if (!rob) {
+      return `Robot « ${robotId} » : aucun état MQTT connu pour cet identifiant (vérifie ROBOT_ID sur la Pi et la connexion broker).`;
+    }
+    const addr = shouldReverseGeocodeGps(rob.gps)
+      ? await reverseGeocodeCached(rob.gps!.lat, rob.gps!.lon)
+      : null;
+    return formatRobotContextForLlm(rob, addr);
+  }
+  const list = getRobots();
+  if (list.length === 0) {
+    return "Aucun robot vu sur MQTT pour l’instant (broker injoignable ou pas de publications mira/robots/+/…).";
+  }
+  const parts: string[] = [];
+  for (const r of list) {
+    const addr = shouldReverseGeocodeGps(r.gps)
+      ? await reverseGeocodeCached(r.gps!.lat, r.gps!.lon)
+      : null;
+    parts.push(formatRobotContextForLlm(r, addr));
+  }
+  return parts.join("\n\n---\n\n");
+}
 import {
   getDockerHealthLocal,
   loadServiceContainersConfig,
@@ -124,7 +160,10 @@ app.post("/api/chat", requireAuth, async (c) => {
     "",
   );
   const model = process.env.OLLAMA_MODEL ?? "mira";
-  let body: { messages?: { role: string; content: string }[] };
+  let body: {
+    messages?: { role: string; content: string }[];
+    robotId?: string | null;
+  };
   try {
     body = await c.req.json();
   } catch {
@@ -133,10 +172,25 @@ app.post("/api/chat", requireAuth, async (c) => {
   const messages = body.messages;
   if (!messages?.length) return c.json({ error: "messages requis" }, 400);
 
+  const robotId =
+    typeof body.robotId === "string" ? body.robotId.trim() : undefined;
+  const mqttBlock = await buildMqttBlockForChat(robotId);
+
+  const dialog = messages.filter(
+    (m) => m.role === "user" || m.role === "assistant",
+  );
+  const messagesForOllama = [
+    {
+      role: "system",
+      content: `${CHAT_SYSTEM_PREAMBLE}\n\n--- Données robot (MQTT, instant présent) ---\n${mqttBlock}`,
+    },
+    ...dialog.map((m) => ({ role: m.role, content: m.content })),
+  ];
+
   const r = await fetch(`${ollamaUrl}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ model, messages, stream: false }),
+    body: JSON.stringify({ model, messages: messagesForOllama, stream: false }),
   });
   if (!r.ok) {
     const t = await r.text();

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Module mira-vision — Détection d'objets via Raspberry Pi AI Camera (Sony IMX500).
-Publie les détections sur MQTT (mira/vision/output) avec un cooldown.
+Publie les détections sur MQTT : JSON sur mira/robots/<ROBOT_ID>/vision/text + texte brut sur mira/vision/output (rétrocompat).
 Sert en option un flux MJPEG HTTP pour le dashboard (iframe streamUrl), avec boîtes et scores si STREAM_DRAW_DETECTIONS=1.
 """
 
@@ -21,7 +21,13 @@ from picamera2.devices.imx500 import NetworkIntrinsics, postprocess_nanodet_dete
 
 MQTT_BROKER       = os.getenv("MQTT_BROKER", "mira-mosquitto")
 MQTT_PORT         = int(os.getenv("MQTT_PORT", "1883"))
+ROBOT_ID          = os.getenv("ROBOT_ID", "mira-robot")
 MQTT_TOPIC        = os.getenv("MQTT_TOPIC_VISION", "mira/vision/output")
+# Topic par robot (JSON) — consommé par le dashboard / contexte LLM
+MQTT_TOPIC_ROBOT  = os.getenv(
+    "MQTT_TOPIC_VISION_ROBOT",
+    f"mira/robots/{ROBOT_ID}/vision/text",
+)
 CONFIDENCE_THRESH = float(os.getenv("CONFIDENCE_THRESHOLD", "0.55"))
 COOLDOWN_SECONDS  = int(os.getenv("COOLDOWN_SECONDS", "10"))
 MODEL_PATH        = os.getenv("IMX500_MODEL",
@@ -399,6 +405,16 @@ def main():
                 phrase = detections_to_phrase(last_detections, labels)
                 if phrase:
                     print(f"{C_CYAN}[VISION] {phrase}{C_RESET}")
+                    payload = json.dumps(
+                        {
+                            "text": phrase,
+                            "ts": now,
+                            "source": "imx500",
+                        },
+                        ensure_ascii=False,
+                    )
+                    mqtt_client.publish(MQTT_TOPIC_ROBOT, payload)
+                    # Rétrocompatibilité (texte brut)
                     mqtt_client.publish(MQTT_TOPIC, phrase)
                     last_publish_time = now
 

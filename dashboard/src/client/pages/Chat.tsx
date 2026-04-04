@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 
 type Msg = { role: "user" | "assistant"; content: string };
 
-type ChatPageProps = { embedded?: boolean };
+type ChatPageProps = {
+  embedded?: boolean;
+  /** Robot sélectionné sur le dashboard : contexte GPS/télémétrie injecté côté serveur. */
+  robotId?: string | null;
+};
 
 /** API Web Speech du navigateur (Chrome / Edge) — distinct du conteneur Docker `mira-stt` (Vosk sur la Pi). */
 type SpeechRec = {
@@ -19,7 +23,7 @@ type SpeechRec = {
   onend: (() => void) | null;
 };
 
-export function ChatPage({ embedded = false }: ChatPageProps) {
+export function ChatPage({ embedded = false, robotId = null }: ChatPageProps) {
   const [input, setInput] = useState("");
   const [messages, setMessages] = useState<Msg[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,6 +120,7 @@ export function ChatPage({ embedded = false }: ChatPageProps) {
         credentials: "include",
         body: JSON.stringify({
           messages: next.map((m) => ({ role: m.role, content: m.content })),
+          robotId: robotId || undefined,
         }),
       });
       const data = (await res.json()) as { content?: string; error?: string };
@@ -150,7 +155,7 @@ export function ChatPage({ embedded = false }: ChatPageProps) {
         <h2>Assistant M.I.R.A</h2>
         <p className="muted chat-stt-note">
           {embedded
-            ? "STT = navigateur (Web Speech), pas le conteneur mira-stt."
+            ? "STT = navigateur (Web Speech), pas mira-stt. Le serveur envoie au LLM le GPS / télémétrie MQTT du robot sélectionné à gauche."
             : "Texte + voix navigateur (Web Speech / synthèse). Le service Docker mira-stt (Vosk) est pour la Pi, pas ce panneau."}
         </p>
       </header>
