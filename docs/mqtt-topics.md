@@ -15,4 +15,6 @@ Convention : `{id}` = identifiant robot (ex. hostname).
 
 Vision texte existante : `mira/vision/output` — à préfixer par robot en multi-unités (`mira/robots/{id}/vision/text`).
 
+Flux vidéo (dashboard) : le conteneur **`mira-vision`** peut servir un **MJPEG** sur `http://<IP_PI>:8080/stream` (voir `STREAM_MJPEG_*` dans `vision.py`) ; l’URL doit être copiée dans **`RPI_STREAM_URL`** (meta MQTT via `mira-rpi-agent`).
+
 Schéma commande HTTP/API : `dashboard/schemas/robot-command.json`.

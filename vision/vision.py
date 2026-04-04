@@ -1,14 +1,18 @@
 #!/usr/bin/env python3
 """
 Module mira-vision — Détection d'objets via Raspberry Pi AI Camera (Sony IMX500).
-Publie les détections sur MQTT (mira/vision/output) avec un cooldown de 30s.
+Publie les détections sur MQTT (mira/vision/output) avec un cooldown.
+Sert en option un flux MJPEG HTTP pour le dashboard (iframe streamUrl).
 """
 
+import threading
 import time
 import json
 import os
 import sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
+import cv2
 import paho.mqtt.client as mqtt
 from picamera2 import Picamera2
 from picamera2.devices import IMX500
@@ -22,6 +26,12 @@ CONFIDENCE_THRESH = float(os.getenv("CONFIDENCE_THRESHOLD", "0.55"))
 COOLDOWN_SECONDS  = int(os.getenv("COOLDOWN_SECONDS", "10"))
 MODEL_PATH        = os.getenv("IMX500_MODEL",
                     "/usr/share/imx500-models/imx500_network_ssd_mobilenetv2_fpnlite_320x320_pp.rpk")
+
+# Flux MJPEG pour le dashboard (RPI_STREAM_URL = http://<IP_PI>:<port>/stream)
+STREAM_MJPEG_ENABLE = os.getenv("STREAM_MJPEG_ENABLE", "1").lower() in ("1", "true", "yes")
+STREAM_MJPEG_PORT   = int(os.getenv("STREAM_MJPEG_PORT", "8080"))
+STREAM_MJPEG_PATH   = os.getenv("STREAM_MJPEG_PATH", "/stream")
+STREAM_FRAME_MIN_S  = float(os.getenv("STREAM_FRAME_MIN_INTERVAL_SEC", "0.15"))  # ~6–7 fps max capture
 
 
 C_RESET  = "\033[0m"
@@ -67,6 +77,82 @@ COCO_FR = {
 
 last_publish_time = 0.0
 mqtt_client = None
+
+_stream_jpeg: bytes | None = None
+_stream_lock = threading.Lock()
+
+
+def _encode_jpeg_bgr(bgr) -> bytes | None:
+    ok, buf = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+    return buf.tobytes() if ok else None
+
+
+def update_mjpeg_frame(picam2: Picamera2) -> None:
+    """Met à jour le dernier JPEG servi sur /stream (appelé depuis la boucle principale)."""
+    global _stream_jpeg
+    try:
+        arr = picam2.capture_array("main")
+        if arr is None or arr.size == 0:
+            return
+        if arr.ndim == 2:
+            bgr = cv2.cvtColor(arr, cv2.COLOR_GRAY2BGR)
+        elif arr.shape[2] == 4:
+            bgr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
+        else:
+            bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        jpg = _encode_jpeg_bgr(bgr)
+        if jpg:
+            with _stream_lock:
+                _stream_jpeg = jpg
+    except Exception as e:
+        print(f"{C_YELLOW}[STREAM] capture_array: {e}{C_RESET}")
+
+
+def _start_mjpeg_server() -> None:
+    path = STREAM_MJPEG_PATH.rstrip("/") or "/stream"
+    boundary = b"frame"
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            req = self.path.split("?", 1)[0]
+            if req in ("/", path):
+                self.send_response(200)
+                self.send_header(
+                    "Content-Type",
+                    "multipart/x-mixed-replace; boundary=" + boundary.decode("ascii"),
+                )
+                self.send_header("Cache-Control", "no-cache, no-store")
+                self.send_header("Pragma", "no-cache")
+                self.send_header("Access-Control-Allow-Origin", "*")
+                self.end_headers()
+                try:
+                    while True:
+                        with _stream_lock:
+                            jpg = _stream_jpeg
+                        if jpg:
+                            self.wfile.write(
+                                b"--" + boundary + b"\r\n"
+                                b"Content-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n"
+                            )
+                        time.sleep(0.04)
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+            else:
+                self.send_error(404)
+
+        def log_message(self, fmt, *args):
+            pass
+
+    def run():
+        srv = HTTPServer(("0.0.0.0", STREAM_MJPEG_PORT), Handler)
+        print(
+            f"{C_GREEN}[STREAM] MJPEG http://0.0.0.0:{STREAM_MJPEG_PORT}{path}{C_RESET}"
+        )
+        srv.serve_forever()
+
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+
 
 def on_mqtt_connect(client, userdata, flags, rc, properties=None):
     if rc == 0:
@@ -148,7 +234,11 @@ def main():
 
     print(f"{C_GREEN}[VISION] ✓ Caméra AI prête. Détection en cours...{C_RESET}")
 
+    if STREAM_MJPEG_ENABLE:
+        _start_mjpeg_server()
+
     last_detections = []
+    last_stream_t = 0.0
     while True:
         try:
             metadata = picam2.capture_metadata()
@@ -189,6 +279,10 @@ def main():
 
             # Cooldown + publication
             now = time.time()
+            if STREAM_MJPEG_ENABLE and (now - last_stream_t) >= STREAM_FRAME_MIN_S:
+                update_mjpeg_frame(picam2)
+                last_stream_t = now
+
             if last_detections and (now - last_publish_time) >= COOLDOWN_SECONDS:
                 phrase = detections_to_phrase(last_detections, labels)
                 if phrase:
