@@ -2,7 +2,7 @@
 """
 Module mira-vision — Détection d'objets via Raspberry Pi AI Camera (Sony IMX500).
 Publie les détections sur MQTT (mira/vision/output) avec un cooldown.
-Sert en option un flux MJPEG HTTP pour le dashboard (iframe streamUrl).
+Sert en option un flux MJPEG HTTP pour le dashboard (iframe streamUrl), avec boîtes et scores si STREAM_DRAW_DETECTIONS=1.
 """
 
 import threading
@@ -38,6 +38,12 @@ STREAM_JPEG_QUALITY = int(os.getenv("STREAM_JPEG_QUALITY", "72"))
 STREAM_PREVIEW_MAX_WIDTH = int(os.getenv("STREAM_PREVIEW_MAX_WIDTH", "960"))
 # Pause fin de boucle principale (impacte détection + MJPEG ; trop bas = CPU↑)
 VISION_LOOP_SLEEP_SEC = float(os.getenv("VISION_LOOP_SLEEP_SEC", "0.05"))
+# Boîtes + labels sur le flux MJPEG (même logique que la détection MQTT)
+STREAM_DRAW_DETECTIONS = os.getenv("STREAM_DRAW_DETECTIONS", "1").lower() in (
+    "1",
+    "true",
+    "yes",
+)
 
 
 C_RESET  = "\033[0m"
@@ -87,6 +93,10 @@ mqtt_client = None
 _stream_jpeg: bytes | None = None
 _stream_lock = threading.Lock()
 _stream_frame_gen = 0
+_stream_overlay_lock = threading.Lock()
+# Liste de (x1, y1, x2, y2, cat_index, score) en coordonnées espace réseau (input_w × input_h)
+_stream_overlay: list[tuple[float, float, float, float, int, float]] = []
+_stream_overlay_input_size: tuple[int, int] = (0, 0)
 
 
 def _encode_jpeg_bgr(bgr) -> bytes | None:
@@ -107,7 +117,55 @@ def _maybe_downscale_bgr(bgr):
     return cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_AREA)
 
 
-def update_mjpeg_frame(picam2: Picamera2) -> None:
+def _draw_detections_on_bgr(
+    bgr,
+    overlay: list[tuple[float, float, float, float, int, float]],
+    labels: list,
+    input_w: int,
+    input_h: int,
+) -> None:
+    """Dessine les boîtes (espace input réseau) sur l’image BGR (taille caméra)."""
+    if not overlay or input_w <= 0 or input_h <= 0:
+        return
+    fh, fw = bgr.shape[0], bgr.shape[1]
+    sx = fw / float(input_w)
+    sy = fh / float(input_h)
+    thickness = max(1, min(4, fw // 320))
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    font_scale = 0.45 * (fw / 640.0)
+    font_scale = max(0.35, min(0.9, font_scale))
+    for x1, y1, x2, y2, cat_i, sc in overlay:
+        px1 = int(round(x1 * sx))
+        py1 = int(round(y1 * sy))
+        px2 = int(round(x2 * sx))
+        py2 = int(round(y2 * sy))
+        px1, px2 = min(px1, px2), max(px1, px2)
+        py1, py2 = min(py1, py2), max(py1, py2)
+        px1 = max(0, min(fw - 1, px1))
+        px2 = max(0, min(fw - 1, px2))
+        py1 = max(0, min(fh - 1, py1))
+        py2 = max(0, min(fh - 1, py2))
+        cv2.rectangle(bgr, (px1, py1), (px2, py2), (0, 220, 0), thickness, cv2.LINE_AA)
+        name_en = ""
+        if 0 <= int(cat_i) < len(labels):
+            name_en = str(labels[int(cat_i)]).strip() or "?"
+        else:
+            name_en = "?"
+        name = COCO_FR.get(name_en, name_en)
+        txt = f"{name} {sc:.2f}"
+        (tw, th), baseline = cv2.getTextSize(txt, font, font_scale, 1)
+        ty = max(py1 - 4, th + 4)
+        cv2.rectangle(
+            bgr,
+            (px1, ty - th - 4),
+            (px1 + tw + 4, ty + baseline),
+            (0, 220, 0),
+            -1,
+        )
+        cv2.putText(bgr, txt, (px1 + 2, ty - 2), font, font_scale, (0, 0, 0), 1, cv2.LINE_AA)
+
+
+def update_mjpeg_frame(picam2: Picamera2, labels: list) -> None:
     """Met à jour le dernier JPEG servi sur /stream (appelé depuis la boucle principale)."""
     global _stream_jpeg, _stream_frame_gen
     try:
@@ -120,6 +178,12 @@ def update_mjpeg_frame(picam2: Picamera2) -> None:
             bgr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
         else:
             bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        if STREAM_DRAW_DETECTIONS:
+            with _stream_overlay_lock:
+                snap = list(_stream_overlay)
+                iw, ih = _stream_overlay_input_size
+            if snap and iw > 0 and ih > 0:
+                _draw_detections_on_bgr(bgr, snap, labels, iw, ih)
         bgr = _maybe_downscale_bgr(bgr)
         jpg = _encode_jpeg_bgr(bgr)
         if jpg:
@@ -229,7 +293,7 @@ def detections_to_phrase(detections, labels):
 
 
 def main():
-    global last_publish_time
+    global last_publish_time, _stream_overlay_input_size
     init_mqtt()
     print(f"{C_CYAN}[INIT] Chargement du modèle IMX500: {MODEL_PATH}{C_RESET}")
     imx500 = IMX500(MODEL_PATH)
@@ -272,6 +336,8 @@ def main():
             np_outputs = imx500.get_outputs(metadata, add_batch=True)
             input_w, input_h = imx500.get_input_size()
 
+            overlay: list[tuple[float, float, float, float, int, float]] = []
+
             if np_outputs is not None:
                 if intrinsics.postprocess == "nanodet":
                     boxes, scores, classes = postprocess_nanodet_detection(
@@ -292,22 +358,41 @@ def main():
                     if intrinsics.bbox_order == "xy":
                         boxes = boxes[:, [1, 0, 3, 2]]
 
-                # Créer liste de détections filtrées
                 class Detection:
                     def __init__(self, cat, conf):
                         self.category = cat
                         self.conf = conf
 
-                last_detections = [
-                    Detection(cat, score)
-                    for _, score, cat in zip(boxes, scores, classes)
-                    if score > CONFIDENCE_THRESH
-                ]
+                last_detections = []
+                n = min(len(boxes), len(scores), len(classes))
+                for i in range(n):
+                    score = float(scores[i])
+                    if score <= CONFIDENCE_THRESH:
+                        continue
+                    cat = int(classes[i])
+                    row = boxes[i]
+                    last_detections.append(Detection(cat, score))
+                    overlay.append(
+                        (
+                            float(row[0]),
+                            float(row[1]),
+                            float(row[2]),
+                            float(row[3]),
+                            cat,
+                            score,
+                        )
+                    )
+            else:
+                last_detections = []
+
+            with _stream_overlay_lock:
+                _stream_overlay[:] = overlay
+                _stream_overlay_input_size = (int(input_w), int(input_h))
 
             # Cooldown + publication
             now = time.time()
             if STREAM_MJPEG_ENABLE and (now - last_stream_t) >= STREAM_FRAME_MIN_S:
-                update_mjpeg_frame(picam2)
+                update_mjpeg_frame(picam2, labels)
                 last_stream_t = now
 
             if last_detections and (now - last_publish_time) >= COOLDOWN_SECONDS:

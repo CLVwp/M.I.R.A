@@ -73,6 +73,7 @@ services:
       - STREAM_JPEG_QUALITY=${STREAM_JPEG_QUALITY:-72}
       - STREAM_PREVIEW_MAX_WIDTH=${STREAM_PREVIEW_MAX_WIDTH:-960}
       - VISION_LOOP_SLEEP_SEC=${VISION_LOOP_SLEEP_SEC:-0.05}
+      - STREAM_DRAW_DETECTIONS=${STREAM_DRAW_DETECTIONS:-1}
     restart: always
     depends_on:
       - mira-mosquitto
