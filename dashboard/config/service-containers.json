@@ -1,6 +1,5 @@
 {
   "onDashboardHost": [
-    "mira-mosquitto",
     "mira-ollama"
   ],
   "onRobot": [

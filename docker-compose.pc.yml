@@ -1,0 +1,19 @@
+# Machine PC — LLM pour le dashboard et pour la Raspberry (STT).
+# Depuis ce dossier : docker compose -f docker-compose.pc.yml up -d
+# Ollama : http://127.0.0.1:11434 (LAN : http://<IP_DU_PC>:11434 depuis la Pi)
+
+name: mira-pc
+
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mira-ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_HOST_PORT:-11434}:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+      - ./LLM/Modelfile:/config/Modelfile:ro
+
+volumes:
+  ollama_data:

@@ -1,3 +1,9 @@
+# Raspberry Pi — MQTT, audio, vision, bridge, agent dashboard.
+# Depuis ce dossier : docker compose -f docker-compose.rpi.yml up -d
+# Ollama sur le PC : définir OLLAMA_PC_HOST (fichier .env à la racine ou export) si ce n’est pas l’IP par défaut.
+
+name: mira-rpi
+
 services:
   mira-mosquitto:
     image: eclipse-mosquitto:latest
@@ -10,19 +16,23 @@ services:
     networks:
       - mira-network
 
-  # LLM local — dashboard (hôte) : OLLAMA_URL=http://127.0.0.1:11434
-  # Depuis les autres services Docker : http://ollama:11434
-  ollama:
-    image: ollama/ollama:latest
-    container_name: mira-ollama
+  mira-rpi-agent:
+    build: ./rpi-agent
+    container_name: mira-rpi-agent
     restart: unless-stopped
-    ports:
-      - "11434:11434"
+    environment:
+      - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - ROBOT_ID=${ROBOT_ID:-mira-robot}
+      - MOCK_GPS=${MOCK_GPS:-1}
+      - STREAM_URL=${RPI_STREAM_URL:-}
+      - ROBOT_DOCKER_CONTAINERS=mira-stt,mira-tts,mira-vision,mira-bridge,mira-mosquitto
     volumes:
-      - ollama_data:/root/.ollama
-      - ./LLM/Modelfile:/config/Modelfile:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
       - mira-network
+    depends_on:
+      - mira-mosquitto
 
   mira-stt:
     build: ./STT
@@ -32,19 +42,18 @@ services:
     devices:
       - "/dev/snd:/dev/snd"
     environment:
-      - OLLAMA_URL=http://ollama:11434/api/generate
-      - OLLAMA_MODEL=mira
+      - OLLAMA_URL=http://${OLLAMA_PC_HOST:-192.168.137.1}:${OLLAMA_PC_PORT:-11434}/api/generate
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mira}
       - MQTT_BROKER=mira-mosquitto
       - MQTT_PORT=1883
-      - ROBOT_ID=mira-robot
+      - ROBOT_ID=${ROBOT_ID:-mira-robot}
     networks:
       - mira-network
     depends_on:
       - mira-mosquitto
-      - ollama
 
   mira-vision:
-    build: ./vision 
+    build: ./vision
     container_name: mira-vision
     privileged: true
     networks:
@@ -100,6 +109,3 @@ networks:
   mira-network:
     name: mira-network
     driver: bridge
-
-volumes:
-  ollama_data:

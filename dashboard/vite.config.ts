@@ -11,10 +11,22 @@ export default defineConfig({
   publicDir: path.resolve(rootDir, "public"),
   server: {
     port: 5173,
+    /** Firefox résout souvent `localhost` en IPv6 (::1) ; sans ça, Vite peut n’écouter que sur 127.0.0.1 → connexion refusée. */
+    host: true,
+    strictPort: true,
     proxy: {
       "/api": {
         target: "http://127.0.0.1:3000",
         changeOrigin: true,
+        /** Évite de bufferiser le SSE (/api/robots/stream) — sinon la liste robots ne se met jamais à jour en dev. */
+        configure(proxy) {
+          proxy.on("proxyRes", (proxyRes, req) => {
+            if (req.url?.includes("/stream")) {
+              proxyRes.headers["cache-control"] = "no-cache";
+              proxyRes.headers["x-accel-buffering"] = "no";
+            }
+          });
+        },
       },
       "/schemas": {
         target: "http://127.0.0.1:3000",

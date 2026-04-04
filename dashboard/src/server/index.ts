@@ -64,14 +64,7 @@ app.get("/api/robots", requireAuth, (c) => {
   return c.json({ robots: getRobots() });
 });
 
-app.get("/api/robots/:id", requireAuth, (c) => {
-  const id = c.req.param("id");
-  if (!id) return c.json({ error: "ID requis" }, 400);
-  const r = getRobot(id);
-  if (!r) return c.json({ error: "Robot introuvable" }, 404);
-  return c.json(r);
-});
-
+/** Avant `/api/robots/:id`, sinon `stream` est pris pour un id → 404 sur le SSE. */
 app.get("/api/robots/stream", requireAuth, async (c) => {
   return streamSSE(c, async (stream) => {
     await stream.writeSSE({
@@ -95,6 +88,14 @@ app.get("/api/robots/stream", requireAuth, async (c) => {
       });
     }
   });
+});
+
+app.get("/api/robots/:id", requireAuth, (c) => {
+  const id = c.req.param("id");
+  if (!id) return c.json({ error: "ID requis" }, 400);
+  const r = getRobot(id);
+  if (!r) return c.json({ error: "Robot introuvable" }, 404);
+  return c.json(r);
 });
 
 app.post("/api/robots/:id/command", requireAuth, async (c) => {

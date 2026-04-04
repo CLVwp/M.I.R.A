@@ -12,7 +12,7 @@ Ce dossier utilise **exclusivement Bun** comme runtime et gestionnaire de paquet
 
 ```bash
 cd ..   # racine M.I.R.A
-docker compose up -d ollama
+docker compose -f docker-compose.pc.yml up -d
 ```
 
 Le port **11434** est exposé sur l’hôte : dans `dashboard/.env`, garde `OLLAMA_URL=http://127.0.0.1:11434`. Les modèles sont stockés dans le volume Docker `ollama_data`.
@@ -20,8 +20,8 @@ Le port **11434** est exposé sur l’hôte : dans `dashboard/.env`, garde `OLLA
 Première utilisation — télécharger le modèle de base et créer `mira` (sous **Git Bash** ou WSL, depuis la racine du dépôt) :
 
 ```bash
-docker compose exec ollama ollama pull qwen2.5:1.5b-instruct
-docker compose exec ollama ollama create mira -f /config/Modelfile
+docker compose -f docker-compose.pc.yml exec ollama ollama pull qwen2.5:1.5b-instruct
+docker compose -f docker-compose.pc.yml exec ollama ollama create mira -f /config/Modelfile
 ```
 
 Sous **Windows**, le GPU (AMD/NVIDIA) dans le conteneur Ollama n’est pas toujours utilisé selon Docker Desktop ; l’inférence peut retomber sur le **CPU** (plus lent mais fonctionnel).
@@ -56,7 +56,7 @@ Ouvrir `http://localhost:5173`.
 
 ### Micro du robot (Vosk) dans le panneau gauche
 
-Quand le service **`mira-stt`** tourne sur la Raspberry avec le micro branché, chaque phrase reconnue est publiée sur MQTT : `mira/robots/{ROBOT_ID}/listening`. Le dashboard affiche le dernier texte sous **« Micro robot (Vosk) »** pour le robot sélectionné (même `ROBOT_ID` que la variable d’environnement du conteneur STT, ex. `mira-robot` dans `docker-compose.yml`).
+Quand le service **`mira-stt`** tourne sur la Raspberry avec le micro branché, chaque phrase reconnue est publiée sur MQTT : `mira/robots/{ROBOT_ID}/listening`. Le dashboard affiche le dernier texte sous **« Micro robot (Vosk) »** pour le robot sélectionné (même `ROBOT_ID` que la variable d’environnement du conteneur STT, ex. `mira-robot` dans `docker-compose.rpi.yml`).
 
 Ce n’est **pas** de l’audio brut dans le navigateur : c’est la **transcription** (texte), en temps quasi réel via le flux SSE existant.
 
@@ -94,7 +94,7 @@ sudo apt install -y git curl ca-certificates python3 python3-venv python3-pip
 
 ### 2. Docker Engine + plugin Compose
 
-Les conteneurs **Mosquitto** et **Ollama** du projet passent par Docker.
+Les conteneurs du projet passent par Docker (stack **Pi** : Mosquitto, STT, etc. ; stack **PC** : Ollama seul — voir `docker-compose.rpi.yml` / `docker-compose.pc.yml`).
 
 ```bash
 curl -fsSL https://get.docker.com | sudo sh
@@ -119,23 +119,17 @@ source ~/.bashrc   # ou le fichier affiché par l’installateur
 bun --version
 ```
 
-### 4. Services Docker du projet (racine du dépôt)
+### 4. Services Docker sur la Pi (racine du dépôt)
 
 ```bash
 cd ~/M.I.R.A   # adapter le chemin
-docker compose up -d mira-mosquitto ollama
-docker compose ps
+docker compose -f docker-compose.rpi.yml up -d
+docker compose -f docker-compose.rpi.yml ps
 ```
 
-Première fois — modèle LLM et création de **`mira`** :
+Optionnel : fichier **`.env`** à la racine pour `OLLAMA_PC_HOST` (IP du PC où tourne Ollama) et `RPI_STREAM_URL` (flux vidéo pour le dashboard).
 
-```bash
-docker compose exec ollama ollama pull qwen2.5:1.5b-instruct
-docker compose exec ollama ollama create mira -f /config/Modelfile
-docker compose exec ollama ollama list
-```
-
-Sur Pi, **RAM limitée** : un modèle `1.5b` reste raisonnable ; évite les grosses variantes si la carte swap.
+**Ollama** : en général sur le **PC** (`docker compose -f docker-compose.pc.yml up -d` sur la machine Windows/Linux du dashboard). Si tu lances Ollama **sur la Pi** aussi, fais-le seulement si la carte a assez de RAM ; crée alors le modèle `mira` avec les commandes `docker compose -f docker-compose.pc.yml exec ollama …` depuis la Pi.
 
 ### 5. Dashboard (Bun) — première fois
 
@@ -228,7 +222,7 @@ sudo ufw reload
 
 ### 10. Stack Python / Docker du robot (hors dashboard)
 
-Le reste du dépôt (STT, TTS, vision, bridge) se lance via **`docker compose`** à la racine ou sur Linux/Pi avec le matériel adapté ; voir le `docker-compose.yml` à la racine du projet. Sur Windows, certains services ne sont pas adaptés ; sur **Pi**, c’est l’environnement cible pour ces conteneurs.
+Le reste du dépôt se lance avec **`docker compose -f docker-compose.rpi.yml`** sur la **Raspberry** (STT, TTS, vision, bridge, Mosquitto, agent). Sur le **PC**, Ollama seul : **`docker compose -f docker-compose.pc.yml`** (voir les fichiers à la racine du projet).
 
 #### PC hôte du dashboard (machine où tourne le dashboard)
 
