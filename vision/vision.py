@@ -31,7 +31,13 @@ MODEL_PATH        = os.getenv("IMX500_MODEL",
 STREAM_MJPEG_ENABLE = os.getenv("STREAM_MJPEG_ENABLE", "1").lower() in ("1", "true", "yes")
 STREAM_MJPEG_PORT   = int(os.getenv("STREAM_MJPEG_PORT", "8080"))
 STREAM_MJPEG_PATH   = os.getenv("STREAM_MJPEG_PATH", "/stream")
-STREAM_FRAME_MIN_S  = float(os.getenv("STREAM_FRAME_MIN_INTERVAL_SEC", "0.15"))  # ~6–7 fps max capture
+# Intervalle mini entre deux captures pour le flux (plus bas = plus fluide, plus de CPU)
+STREAM_FRAME_MIN_S = float(os.getenv("STREAM_FRAME_MIN_INTERVAL_SEC", "0.04"))
+STREAM_JPEG_QUALITY = int(os.getenv("STREAM_JPEG_QUALITY", "72"))
+# Largeur max du flux (0 = taille caméra ; ex. 960 ou 720 pour alléger encodage + réseau)
+STREAM_PREVIEW_MAX_WIDTH = int(os.getenv("STREAM_PREVIEW_MAX_WIDTH", "960"))
+# Pause fin de boucle principale (impacte détection + MJPEG ; trop bas = CPU↑)
+VISION_LOOP_SLEEP_SEC = float(os.getenv("VISION_LOOP_SLEEP_SEC", "0.05"))
 
 
 C_RESET  = "\033[0m"
@@ -80,16 +86,30 @@ mqtt_client = None
 
 _stream_jpeg: bytes | None = None
 _stream_lock = threading.Lock()
+_stream_frame_gen = 0
 
 
 def _encode_jpeg_bgr(bgr) -> bytes | None:
-    ok, buf = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), 82])
+    q = max(40, min(95, STREAM_JPEG_QUALITY))
+    ok, buf = cv2.imencode(".jpg", bgr, [int(cv2.IMWRITE_JPEG_QUALITY), q])
     return buf.tobytes() if ok else None
+
+
+def _maybe_downscale_bgr(bgr):
+    if STREAM_PREVIEW_MAX_WIDTH <= 0:
+        return bgr
+    h, w = bgr.shape[:2]
+    if w <= STREAM_PREVIEW_MAX_WIDTH:
+        return bgr
+    scale = STREAM_PREVIEW_MAX_WIDTH / float(w)
+    nw = STREAM_PREVIEW_MAX_WIDTH
+    nh = max(1, int(h * scale))
+    return cv2.resize(bgr, (nw, nh), interpolation=cv2.INTER_AREA)
 
 
 def update_mjpeg_frame(picam2: Picamera2) -> None:
     """Met à jour le dernier JPEG servi sur /stream (appelé depuis la boucle principale)."""
-    global _stream_jpeg
+    global _stream_jpeg, _stream_frame_gen
     try:
         arr = picam2.capture_array("main")
         if arr is None or arr.size == 0:
@@ -100,10 +120,12 @@ def update_mjpeg_frame(picam2: Picamera2) -> None:
             bgr = cv2.cvtColor(arr, cv2.COLOR_RGBA2BGR)
         else:
             bgr = cv2.cvtColor(arr, cv2.COLOR_RGB2BGR)
+        bgr = _maybe_downscale_bgr(bgr)
         jpg = _encode_jpeg_bgr(bgr)
         if jpg:
             with _stream_lock:
                 _stream_jpeg = jpg
+                _stream_frame_gen += 1
     except Exception as e:
         print(f"{C_YELLOW}[STREAM] capture_array: {e}{C_RESET}")
 
@@ -125,16 +147,21 @@ def _start_mjpeg_server() -> None:
                 self.send_header("Pragma", "no-cache")
                 self.send_header("Access-Control-Allow-Origin", "*")
                 self.end_headers()
+                last_gen = -1
                 try:
                     while True:
                         with _stream_lock:
                             jpg = _stream_jpeg
-                        if jpg:
+                            gen = _stream_frame_gen
+                        if jpg and gen != last_gen:
                             self.wfile.write(
                                 b"--" + boundary + b"\r\n"
                                 b"Content-Type: image/jpeg\r\n\r\n" + jpg + b"\r\n"
                             )
-                        time.sleep(0.04)
+                            last_gen = gen
+                            time.sleep(0.001)
+                        else:
+                            time.sleep(0.004)
                 except (BrokenPipeError, ConnectionResetError):
                     pass
             else:
@@ -290,7 +317,7 @@ def main():
                     mqtt_client.publish(MQTT_TOPIC, phrase)
                     last_publish_time = now
 
-            time.sleep(0.1)
+            time.sleep(VISION_LOOP_SLEEP_SEC)
 
         except KeyboardInterrupt:
             print(f"\n{C_YELLOW}[VISION] Arrêt...{C_RESET}")
