@@ -55,12 +55,24 @@ const icon = L.icon({
   iconAnchor: [12, 41],
 });
 
+const SERVO_LAYOUT = [
+  { idx: 0, label: "FL epaule", pin: 33 },
+  { idx: 1, label: "FL genou", pin: 25 },
+  { idx: 2, label: "FR epaule", pin: 26 },
+  { idx: 3, label: "FR genou", pin: 32 },
+  { idx: 4, label: "RL epaule", pin: 13 },
+  { idx: 5, label: "RL genou", pin: 12 },
+  { idx: 6, label: "RR epaule", pin: 14 },
+  { idx: 7, label: "RR genou", pin: 27 },
+] as const;
+
 export function DashboardPage() {
   const [robots, setRobots] = useState<RobotSnap[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [commandAction, setCommandAction] = useState("stop");
-  const [servoIndex, setServoIndex] = useState(0);
-  const [servoAngle, setServoAngle] = useState(90);
+  const [servoAngles, setServoAngles] = useState<number[]>(
+    SERVO_LAYOUT.map(() => 90),
+  );
   const [walkSpeed, setWalkSpeed] = useState(0.2);
   const [sequenceText, setSequenceText] = useState(
     '{"t":"cmd","m":"stand"}\n{"t":"cmd","m":"walk","v":0.2}\n{"t":"cmd","m":"speed","v":0.5}',
@@ -150,10 +162,23 @@ export function DashboardPage() {
     if (!res.ok) throw new Error(data.error ?? "Erreur envoi commande");
   }
 
-  async function sendServo() {
+  async function sendServo(index: number) {
     try {
-      await sendBridgePayload({ t: "srv", i: servoIndex, a: servoAngle });
-      setControlStatus(`Servo ${servoIndex} -> ${servoAngle} deg`);
+      const angle = Math.max(0, Math.min(180, Math.round(servoAngles[index])));
+      await sendBridgePayload({ t: "srv", i: index, a: angle });
+      setControlStatus(`Servo ${index} -> ${angle} deg`);
+    } catch (e) {
+      setControlStatus(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function sendAllServos() {
+    try {
+      for (const s of SERVO_LAYOUT) {
+        const angle = Math.max(0, Math.min(180, Math.round(servoAngles[s.idx])));
+        await sendBridgePayload({ t: "srv", i: s.idx, a: angle });
+      }
+      setControlStatus("8 servos envoyes");
     } catch (e) {
       setControlStatus(e instanceof Error ? e.message : String(e));
     }
@@ -351,31 +376,38 @@ export function DashboardPage() {
                   onChange={(e) => setWalkSpeed(Number(e.target.value))}
                 />
               </label>
-              <h4>Servo individuel</h4>
-              <label className="muted small">
-                Index (0..7)
-                <input
-                  type="number"
-                  min={0}
-                  max={7}
-                  step={1}
-                  value={servoIndex}
-                  onChange={(e) => setServoIndex(Number(e.target.value))}
-                />
-              </label>
-              <label className="muted small">
-                Angle (0..180)
-                <input
-                  type="number"
-                  min={0}
-                  max={180}
-                  step={1}
-                  value={servoAngle}
-                  onChange={(e) => setServoAngle(Number(e.target.value))}
-                />
-              </label>
-              <button type="button" onClick={() => void sendServo()}>
-                Envoyer servo
+              <h4>Servos (0..180, pas 1)</h4>
+              <p className="muted small">
+                Ordre: FL epaule, FL genou, FR epaule, FR genou, RL epaule,
+                RL genou, RR epaule, RR genou.
+              </p>
+              {SERVO_LAYOUT.map((s) => (
+                <div key={s.idx} className="muted small">
+                  <label>
+                    {s.idx} - {s.label} (GPIO {s.pin}): {Math.round(servoAngles[s.idx])}
+                  </label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={180}
+                    step={1}
+                    value={servoAngles[s.idx]}
+                    onChange={(e) => {
+                      const v = Number(e.target.value);
+                      setServoAngles((prev) => {
+                        const next = [...prev];
+                        next[s.idx] = v;
+                        return next;
+                      });
+                    }}
+                  />
+                  <button type="button" onClick={() => void sendServo(s.idx)}>
+                    Envoyer {s.idx}
+                  </button>
+                </div>
+              ))}
+              <button type="button" onClick={() => void sendAllServos()}>
+                Envoyer les 8 servos
               </button>
               <h4>Sequence JSON (1 ligne = 1 commande)</h4>
               <textarea
