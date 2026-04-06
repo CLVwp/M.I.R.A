@@ -1,30 +1,48 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://mira.local/schemas/robot-command.json",
-  "title": "Commande pont M.I.R.A",
+  "title": "Commande bridge M.I.R.A",
   "type": "object",
-  "required": ["action"],
-  "properties": {
-    "action": {
-      "type": "string",
-      "description": "Verbe reconnu par le bridge (voir bridge.py)",
-      "enum": [
-        "avance",
-        "avancer",
-        "recule",
-        "reculer",
-        "recul",
-        "gauche",
-        "droite",
-        "stop",
-        "stoppe",
-        "arrête",
-        "arreter",
-        "autopilot",
-        "autopilote",
-        "position"
-      ]
+  "oneOf": [
+    {
+      "required": ["action"],
+      "properties": {
+        "action": {
+          "type": "string",
+          "description": "Compat historique bridge.py",
+          "enum": [
+            "avance",
+            "avancer",
+            "recule",
+            "reculer",
+            "recul",
+            "gauche",
+            "droite",
+            "stop",
+            "stoppe",
+            "arrête",
+            "arreter",
+            "autopilot",
+            "autopilote",
+            "position"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "required": ["t"],
+      "properties": {
+        "t": { "type": "string", "enum": ["cmd", "srv"] },
+        "m": {
+          "type": "string",
+          "description": "Mode pour t=cmd (stand, stand_low, walk, speed, etc.)"
+        },
+        "i": { "type": "integer", "minimum": 0, "maximum": 7 },
+        "a": { "type": "number", "minimum": 0, "maximum": 180 },
+        "v": { "type": "number", "minimum": 0, "maximum": 1 }
+      },
+      "additionalProperties": true
     }
-  },
-  "additionalProperties": false
+  ]
 }

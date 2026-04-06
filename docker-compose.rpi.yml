@@ -31,9 +31,9 @@ services:
       - GPS_BAUD=${GPS_BAUD:-9600}
       - STREAM_URL=${RPI_STREAM_URL:-}
       - ROBOT_DOCKER_CONTAINERS=mira-stt,mira-tts,mira-vision,mira-bridge,mira-mosquitto
-    # GPS USB (CP2102 → souvent ttyUSB0). Sans dongle : commenter + MOCK_GPS=1 dans .env
+    # GPS USB: définir HOST_GPS_DEV dans .env (ex /dev/ttyUSB0 ou /dev/serial/by-id/...)
     devices:
-      - /dev/ttyUSB0:/dev/gps0
+      - ${HOST_GPS_DEV:-/dev/ttyUSB0}:/dev/gps0
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks:
@@ -93,11 +93,11 @@ services:
     restart: unless-stopped
     privileged: true
     devices:
-      - "/dev/ttyUSB0:/dev/ttyUSB0"
+      - "${HOST_ESP32_DEV:-/dev/ttyUSB1}:/dev/esp32"
     environment:
       - MQTT_BROKER=mira-mosquitto
       - MQTT_PORT=1883
-      - UART_PORT=/dev/ttyUSB0
+      - UART_PORT=/dev/esp32
       - UART_BAUD=115200
     networks:
       - mira-network

@@ -137,17 +137,32 @@ app.get("/api/robots/:id", requireAuth, (c) => {
 app.post("/api/robots/:id/command", requireAuth, async (c) => {
   const id = c.req.param("id");
   if (!id) return c.json({ error: "ID requis" }, 400);
-  let body: { action?: string };
+  let body: {
+    action?: string;
+    t?: string;
+    m?: string;
+    i?: number;
+    a?: number;
+    v?: number;
+  };
   try {
     body = await c.req.json();
   } catch {
     return c.json({ error: "JSON invalide" }, 400);
   }
   const action = body.action?.toLowerCase?.().trim();
-  if (!action) return c.json({ error: "Champ action requis" }, 400);
+  const hasEspJson = typeof body.t === "string";
+  if (!action && !hasEspJson) {
+    return c.json({ error: "Champ requis: action OU t (cmd/srv)" }, 400);
+  }
+  const payload = hasEspJson ? body : { action };
   try {
-    await publishCommand(id, { action });
-    return c.json({ ok: true, topic: `mira/robots/${id}/bridge/ordres` });
+    await publishCommand(id, payload as Record<string, unknown>);
+    return c.json({
+      ok: true,
+      topic: `mira/robots/${id}/bridge/ordres`,
+      mode: hasEspJson ? "esp32-json" : "legacy-action",
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return c.json({ error: msg }, 503);
@@ -206,9 +221,16 @@ app.post("/api/chat", requireAuth, async (c) => {
 app.get("/api/ai/tools", requireAuth, (c) => {
   return c.json({
     commands: {
-      description: "Publie une commande moteur sur MQTT (même format que bridge)",
+      description: "Publie une commande bridge (legacy action ou JSON ESP32 t/cmd/srv)",
       endpoint: "POST /api/robots/:id/command",
-      body: { action: "avance | recule | gauche | droite | stop | autopilot | position" },
+      body: {
+        action: "avance | recule | gauche | droite | stop | autopilot | position",
+        t: "cmd|srv",
+        m: "stand|stand_low|walk|speed",
+        i: 0,
+        a: 90,
+        v: 0.2,
+      },
       schema: "/schemas/robot-command.json",
     },
   });

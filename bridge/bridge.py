@@ -103,21 +103,30 @@ def on_message(client, userdata, msg):
     """Callback appelé quand un ordre arrive sur mira/bridge/ordres."""
     try:
         payload = json.loads(msg.payload.decode("utf-8"))
-        action = payload.get("action", "").lower().strip()
-
-        if not action:
-            print(f"{C_YELLOW}[BRIDGE] Message reçu sans action : {payload}{C_RESET}")
+        # Mode passthrough JSON direct vers ESP32 (NDJSON firmware)
+        # Ex: {"t":"cmd","m":"walk","v":0.2} ou {"t":"srv","i":0,"a":90}
+        if isinstance(payload, dict) and isinstance(payload.get("t"), str):
+            frame = json.dumps(payload, ensure_ascii=False, separators=(",", ":")) + "\n"
+            print(
+                f"{C_BLUE}[BRIDGE] passthrough JSON → ESP32 : "
+                f"{payload.get('t')}{C_RESET}"
+            )
+            send_uart(frame)
             return
 
-        # Traduire en commande UART
-        uart_cmd = COMMAND_MAP.get(action)
+        # Compat historique dashboard : {"action":"avance"}
+        action = str(payload.get("action", "")).lower().strip()
+        if action:
+            uart_cmd = COMMAND_MAP.get(action)
+            if uart_cmd:
+                frame = f"<CMD:{uart_cmd}>\n"
+                print(f"{C_BLUE}[BRIDGE] {action} → {uart_cmd}{C_RESET}")
+                send_uart(frame)
+            else:
+                print(f"{C_YELLOW}[BRIDGE] Action inconnue : '{action}'{C_RESET}")
+            return
 
-        if uart_cmd:
-            frame = f"<CMD:{uart_cmd}>\n"
-            print(f"{C_BLUE}[BRIDGE] {action} → {uart_cmd}{C_RESET}")
-            send_uart(frame)
-        else:
-            print(f"{C_YELLOW}[BRIDGE] Action inconnue : '{action}'{C_RESET}")
+        print(f"{C_YELLOW}[BRIDGE] Message sans champ exploitable (action|t) : {payload}{C_RESET}")
 
     except json.JSONDecodeError:
         print(f"{C_RED}[BRIDGE] JSON invalide : {msg.payload}{C_RESET}")

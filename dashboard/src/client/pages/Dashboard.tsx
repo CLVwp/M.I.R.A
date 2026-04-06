@@ -59,6 +59,14 @@ export function DashboardPage() {
   const [robots, setRobots] = useState<RobotSnap[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [commandAction, setCommandAction] = useState("stop");
+  const [servoIndex, setServoIndex] = useState(0);
+  const [servoAngle, setServoAngle] = useState(90);
+  const [walkSpeed, setWalkSpeed] = useState(0.2);
+  const [sequenceText, setSequenceText] = useState(
+    '{"t":"cmd","m":"stand"}\n{"t":"cmd","m":"walk","v":0.2}\n{"t":"cmd","m":"speed","v":0.5}',
+  );
+  const [sequenceDelayMs, setSequenceDelayMs] = useState(500);
+  const [controlStatus, setControlStatus] = useState<string | null>(null);
   const [containersCfg, setContainersCfg] = useState<ContainersConfig | null>(
     null,
   );
@@ -128,6 +136,60 @@ export function DashboardPage() {
       credentials: "include",
       body: JSON.stringify({ action: commandAction }),
     });
+  }
+
+  async function sendBridgePayload(payload: Record<string, unknown>) {
+    if (!selectedId) return;
+    const res = await fetch(`/api/robots/${encodeURIComponent(selectedId)}/command`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as { error?: string };
+    if (!res.ok) throw new Error(data.error ?? "Erreur envoi commande");
+  }
+
+  async function sendServo() {
+    try {
+      await sendBridgePayload({ t: "srv", i: servoIndex, a: servoAngle });
+      setControlStatus(`Servo ${servoIndex} -> ${servoAngle} deg`);
+    } catch (e) {
+      setControlStatus(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function sendCmd(m: string, v?: number) {
+    try {
+      const payload: Record<string, unknown> = { t: "cmd", m };
+      if (typeof v === "number") payload.v = v;
+      await sendBridgePayload(payload);
+      setControlStatus(`Commande envoyee: ${m}${typeof v === "number" ? ` (v=${v})` : ""}`);
+    } catch (e) {
+      setControlStatus(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  async function runSequence() {
+    const lines = sequenceText
+      .split("\n")
+      .map((l) => l.trim())
+      .filter(Boolean);
+    try {
+      for (const [i, line] of lines.entries()) {
+        const payload = JSON.parse(line) as Record<string, unknown>;
+        await sendBridgePayload(payload);
+        setControlStatus(`Sequence ${i + 1}/${lines.length} envoyee`);
+        if (i < lines.length - 1) {
+          await new Promise((r) => window.setTimeout(r, sequenceDelayMs));
+        }
+      }
+      setControlStatus("Sequence terminee");
+    } catch (e) {
+      setControlStatus(
+        `Sequence en erreur: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   }
 
   const streamUrl =
@@ -263,6 +325,79 @@ export function DashboardPage() {
               <button type="button" onClick={() => void sendCommand()}>
                 Envoyer
               </button>
+              <h3>Pilotage ESP32 (JSON)</h3>
+              <div className="muted small">
+                <button type="button" onClick={() => void sendCmd("stand")}>
+                  stand
+                </button>{" "}
+                <button type="button" onClick={() => void sendCmd("stand_low")}>
+                  stand_low
+                </button>{" "}
+                <button type="button" onClick={() => void sendCmd("walk")}>
+                  walk
+                </button>{" "}
+                <button type="button" onClick={() => void sendCmd("speed", walkSpeed)}>
+                  speed
+                </button>
+              </div>
+              <label className="muted small">
+                Vitesse (v 0..1)
+                <input
+                  type="number"
+                  min={0}
+                  max={1}
+                  step={0.05}
+                  value={walkSpeed}
+                  onChange={(e) => setWalkSpeed(Number(e.target.value))}
+                />
+              </label>
+              <h4>Servo individuel</h4>
+              <label className="muted small">
+                Index (0..7)
+                <input
+                  type="number"
+                  min={0}
+                  max={7}
+                  step={1}
+                  value={servoIndex}
+                  onChange={(e) => setServoIndex(Number(e.target.value))}
+                />
+              </label>
+              <label className="muted small">
+                Angle (0..180)
+                <input
+                  type="number"
+                  min={0}
+                  max={180}
+                  step={1}
+                  value={servoAngle}
+                  onChange={(e) => setServoAngle(Number(e.target.value))}
+                />
+              </label>
+              <button type="button" onClick={() => void sendServo()}>
+                Envoyer servo
+              </button>
+              <h4>Sequence JSON (1 ligne = 1 commande)</h4>
+              <textarea
+                className="telemetry"
+                rows={6}
+                value={sequenceText}
+                onChange={(e) => setSequenceText(e.target.value)}
+              />
+              <label className="muted small">
+                Delai entre lignes (ms)
+                <input
+                  type="number"
+                  min={0}
+                  step={50}
+                  value={sequenceDelayMs}
+                  onChange={(e) => setSequenceDelayMs(Number(e.target.value))}
+                />
+              </label>
+              <button type="button" onClick={() => void runSequence()}>
+                Lancer sequence
+              </button>
+              {controlStatus && <p className="muted small">{controlStatus}</p>}
               <p className="muted small sidebar-hint">
                 La transcription micro s’affiche au centre (panneau dédié).
               </p>
