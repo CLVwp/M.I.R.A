@@ -86,6 +86,9 @@ export function DashboardPage() {
     ok: true,
     services: [],
   });
+  const [videoRenderMode, setVideoRenderMode] = useState<"img" | "iframe">(
+    "img",
+  );
 
   const selected = useMemo(
     () => robots.find((r) => r.id === selectedId) ?? null,
@@ -221,6 +224,10 @@ export function DashboardPage() {
     selected?.meta && typeof selected.meta.streamUrl === "string"
       ? (selected.meta.streamUrl as string)
       : null;
+
+  useEffect(() => {
+    setVideoRenderMode("img");
+  }, [streamUrl]);
 
   const robotDockerRows = useMemo(() => {
     const labels = containersCfg?.labels ?? {};
@@ -578,7 +585,23 @@ export function DashboardPage() {
           <div className="video-panel video-panel--center">
             <h3 className="section-title">Flux vidéo</h3>
             {streamUrl ? (
-              <iframe title="stream" src={streamUrl} className="video-frame" />
+              videoRenderMode === "img" ? (
+                <div className="video-media">
+                  <img
+                    src={streamUrl}
+                    className="video-image"
+                    alt="Flux caméra"
+                    onError={() => setVideoRenderMode("iframe")}
+                  />
+                </div>
+              ) : (
+                <iframe
+                  title="stream"
+                  src={streamUrl}
+                  className="video-frame"
+                  scrolling="no"
+                />
+              )
             ) : (
               <p className="muted video-placeholder">
                 Aucune URL (champ <code>streamUrl</code> dans meta MQTT)
