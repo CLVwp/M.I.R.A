@@ -12,7 +12,7 @@ import paho.mqtt.client as mqtt
 from vosk import Model, KaldiRecognizer
 
 VOSK_RATE = 16000
-WAKE_WORDS = ["mira", "miro"]
+WAKE_WORDS = ["mira", "miro","meera","meero"]
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://100.68.211.25:11434/api/generate")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "mira")
 MODEL_PATH = os.getenv("VOSK_MODEL", "/app/model")
@@ -97,6 +97,11 @@ def publish_listening(text: str):
     except Exception as e:
         print(f"{C_RED}[MQTT] publish listening: {e}{C_RESET}")
 
+def publish_action_recognized(action: str, spoken: str):
+    """Publie un état explicite pour le dashboard quand une action robot est reconnue."""
+    msg = f"Action reconnue: {action} (commande: {spoken})"
+    publish_listening(msg)
+
 def process_text(text):
     text_lower = text.lower().strip()
     
@@ -116,6 +121,7 @@ def process_text(text):
     if motor_cmd:
         if mqtt_client:
             mqtt_client.publish("mira/bridge/ordres", json.dumps({"action": motor_cmd}))
+        publish_action_recognized(motor_cmd, after_wake)
         return
 
     threading.Thread(target=_ask_and_print, args=(after_wake,), daemon=True).start()
