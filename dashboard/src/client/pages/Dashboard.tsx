@@ -55,25 +55,15 @@ const icon = L.icon({
   iconAnchor: [12, 41],
 });
 
-const SERVO_LAYOUT = [
-  { idx: 0, label: "FL epaule", pin: 33 },
-  { idx: 1, label: "FL genou", pin: 25 },
-  { idx: 2, label: "FR epaule", pin: 26 },
-  { idx: 3, label: "FR genou", pin: 32 },
-  { idx: 4, label: "RL epaule", pin: 13 },
-  { idx: 5, label: "RL genou", pin: 12 },
-  { idx: 6, label: "RR epaule", pin: 14 },
-  { idx: 7, label: "RR genou", pin: 27 },
-] as const;
-
 export function DashboardPage() {
   const [robots, setRobots] = useState<RobotSnap[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [commandAction, setCommandAction] = useState("stop");
-  const [servoAngles, setServoAngles] = useState<number[]>(
-    SERVO_LAYOUT.map(() => 90),
-  );
-  const [walkSpeed, setWalkSpeed] = useState(0.2);
+  const [walkSpeed, setWalkSpeed] = useState(0.65);
+  const [walkX, setWalkX] = useState(0.9);
+  const [walkYaw, setWalkYaw] = useState(0);
+  const [motionX, setMotionX] = useState(0.8);
+  const [motionYaw, setMotionYaw] = useState(-0.4);
   const [sequenceText, setSequenceText] = useState(
     '{"t":"cmd","m":"stand"}\n{"t":"cmd","m":"walk","v":0.2}\n{"t":"cmd","m":"speed","v":0.5}',
   );
@@ -165,34 +155,14 @@ export function DashboardPage() {
     if (!res.ok) throw new Error(data.error ?? "Erreur envoi commande");
   }
 
-  async function sendServo(index: number) {
-    try {
-      const angle = Math.max(0, Math.min(180, Math.round(servoAngles[index])));
-      await sendBridgePayload({ t: "srv", i: index, a: angle });
-      setControlStatus(`Servo ${index} -> ${angle} deg`);
-    } catch (e) {
-      setControlStatus(e instanceof Error ? e.message : String(e));
-    }
+  function clamp(value: number, min: number, max: number) {
+    return Math.max(min, Math.min(max, value));
   }
 
-  async function sendAllServos() {
+  async function sendCmdJson(payload: Record<string, unknown>, label: string) {
     try {
-      for (const s of SERVO_LAYOUT) {
-        const angle = Math.max(0, Math.min(180, Math.round(servoAngles[s.idx])));
-        await sendBridgePayload({ t: "srv", i: s.idx, a: angle });
-      }
-      setControlStatus("8 servos envoyes");
-    } catch (e) {
-      setControlStatus(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  async function sendCmd(m: string, v?: number) {
-    try {
-      const payload: Record<string, unknown> = { t: "cmd", m };
-      if (typeof v === "number") payload.v = v;
       await sendBridgePayload(payload);
-      setControlStatus(`Commande envoyee: ${m}${typeof v === "number" ? ` (v=${v})` : ""}`);
+      setControlStatus(`${label} envoyee: ${JSON.stringify(payload)}`);
     } catch (e) {
       setControlStatus(e instanceof Error ? e.message : String(e));
     }
@@ -359,21 +329,61 @@ export function DashboardPage() {
               </button>
               <h3>Pilotage ESP32 (JSON)</h3>
               <div className="muted small">
-                <button type="button" onClick={() => void sendCmd("stand")}>
-                  stand
+                <button
+                  type="button"
+                  onClick={() =>
+                    void sendCmdJson({ t: "cmd", m: "stand_low" }, "stand")
+                  }
+                >
+                  Stand
                 </button>{" "}
-                <button type="button" onClick={() => void sendCmd("stand_low")}>
-                  stand_low
+                <button
+                  type="button"
+                  onClick={() =>
+                    void sendCmdJson(
+                      { t: "cmd", m: "stand_low_gorille" },
+                      "stand walk ready",
+                    )
+                  }
+                >
+                  Stand walk ready
                 </button>{" "}
-                <button type="button" onClick={() => void sendCmd("walk")}>
-                  walk
+                <button
+                  type="button"
+                  onClick={() =>
+                    void sendCmdJson(
+                      {
+                        t: "cmd",
+                        m: "walk_gorille",
+                        v: clamp(walkSpeed, 0, 1),
+                        x: clamp(walkX, -1, 1),
+                        yaw: clamp(walkYaw, -1, 1),
+                      },
+                      "walk gorille",
+                    )
+                  }
+                >
+                  Walk gorille
                 </button>{" "}
-                <button type="button" onClick={() => void sendCmd("speed", walkSpeed)}>
-                  speed
+                <button
+                  type="button"
+                  onClick={() =>
+                    void sendCmdJson(
+                      {
+                        t: "cmd",
+                        m: "motion",
+                        x: clamp(motionX, -1, 1),
+                        yaw: clamp(motionYaw, -1, 1),
+                      },
+                      "motion",
+                    )
+                  }
+                >
+                  Motion
                 </button>
               </div>
               <label className="muted small">
-                Vitesse (v 0..1)
+                Walk gorille (v 0..1)
                 <input
                   type="number"
                   min={0}
@@ -383,39 +393,50 @@ export function DashboardPage() {
                   onChange={(e) => setWalkSpeed(Number(e.target.value))}
                 />
               </label>
-              <h4>Servos (0..180, pas 1)</h4>
-              <p className="muted small">
-                Ordre: FL epaule, FL genou, FR epaule, FR genou, RL epaule,
-                RL genou, RR epaule, RR genou.
-              </p>
-              {SERVO_LAYOUT.map((s) => (
-                <div key={s.idx} className="muted small">
-                  <label>
-                    {s.idx} - {s.label} (GPIO {s.pin}): {Math.round(servoAngles[s.idx])}
-                  </label>
-                  <input
-                    type="range"
-                    min={0}
-                    max={180}
-                    step={1}
-                    value={servoAngles[s.idx]}
-                    onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setServoAngles((prev) => {
-                        const next = [...prev];
-                        next[s.idx] = v;
-                        return next;
-                      });
-                    }}
-                  />
-                  <button type="button" onClick={() => void sendServo(s.idx)}>
-                    Envoyer {s.idx}
-                  </button>
-                </div>
-              ))}
-              <button type="button" onClick={() => void sendAllServos()}>
-                Envoyer les 8 servos
-              </button>
+              <label className="muted small">
+                Walk gorille (x -1..1)
+                <input
+                  type="number"
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  value={walkX}
+                  onChange={(e) => setWalkX(Number(e.target.value))}
+                />
+              </label>
+              <label className="muted small">
+                Walk gorille (yaw -1..1)
+                <input
+                  type="number"
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  value={walkYaw}
+                  onChange={(e) => setWalkYaw(Number(e.target.value))}
+                />
+              </label>
+              <label className="muted small">
+                Motion (x -1..1)
+                <input
+                  type="number"
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  value={motionX}
+                  onChange={(e) => setMotionX(Number(e.target.value))}
+                />
+              </label>
+              <label className="muted small">
+                Motion (yaw -1..1)
+                <input
+                  type="number"
+                  min={-1}
+                  max={1}
+                  step={0.05}
+                  value={motionYaw}
+                  onChange={(e) => setMotionYaw(Number(e.target.value))}
+                />
+              </label>
               <h4>Sequence JSON (1 ligne = 1 commande)</h4>
               <textarea
                 className="telemetry"

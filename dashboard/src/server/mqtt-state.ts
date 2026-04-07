@@ -230,9 +230,29 @@ export function startMqtt(): void {
     client?.subscribe("mira/robots/+/vision/text", { qos: 0 });
     client?.subscribe("mira/robots/+/docker/status", { qos: 0 });
     client?.subscribe("mira/vision/output", { qos: 0 });
+    client?.subscribe("mira/bridge/feedback", { qos: 0 });
   });
 
   client.on("message", (topic, payload) => {
+    const legacyBridgeRobot =
+      process.env.MQTT_LEGACY_BRIDGE_ROBOT_ID?.trim() || "mira-robot";
+    if (topic === "mira/bridge/feedback") {
+      const r = ensureRobot(legacyBridgeRobot);
+      r.lastSeen = Date.now();
+      const raw = payload.toString("utf-8").trim();
+      if (raw) {
+        try {
+          const data = JSON.parse(raw) as Record<string, unknown>;
+          // Le firmware ESP32 publie typiquement {"t":"tel", ...}
+          r.telemetry = data;
+        } catch {
+          r.telemetry = { raw };
+        }
+      }
+      for (const l of listeners) l({ ...r });
+      return;
+    }
+
     const legacyVisionRobot =
       process.env.MQTT_LEGACY_VISION_ROBOT_ID?.trim() || "mira-robot";
     if (topic === "mira/vision/output") {
