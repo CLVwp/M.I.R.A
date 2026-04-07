@@ -230,12 +230,12 @@ body {
 }
 
 .dashboard-3col {
-  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(
-    280px,
-    400px
+  grid-template-columns: minmax(260px, 320px) minmax(0, 1fr) minmax(
+    320px,
+    420px
   );
   align-items: stretch;
-  min-height: calc(100vh - 5.5rem);
+  min-height: calc(100vh - 8.5rem);
 }
 
 .sidebar {
@@ -243,8 +243,16 @@ body {
   border: 1px solid #30363d;
   border-radius: 8px;
   padding: 1rem;
-  overflow: auto;
+  overflow: hidden;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar .robot-list {
+  overflow: auto;
+  max-height: 24vh;
+  padding-right: 0.2rem;
 }
 
 .sidebar h2 {
@@ -281,6 +289,8 @@ body {
   margin-top: 1rem;
   padding-top: 1rem;
   border-top: 1px solid #30363d;
+  overflow: auto;
+  min-height: 0;
 }
 
 .panel select,
@@ -293,15 +303,19 @@ body {
 .telemetry {
   font-size: 0.75rem;
   overflow: auto;
-  max-height: 200px;
+  max-height: 180px;
   background: #0d1117;
   padding: 0.5rem;
   border-radius: 4px;
 }
 
 .dashboard-center {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows:
+    minmax(240px, 34vh)
+    minmax(110px, 18vh)
+    minmax(110px, 18vh)
+    minmax(190px, 30vh);
   gap: 0.75rem;
   min-height: 0;
   min-width: 0;
@@ -315,8 +329,7 @@ body {
 }
 
 .map-section {
-  flex: 1 1 58%;
-  min-height: 220px;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   background: #161b22;
@@ -329,15 +342,14 @@ body {
 .map {
   flex: 1;
   width: 100%;
-  min-height: 200px;
+  min-height: 0;
   border-radius: 6px;
   border: 1px solid #30363d;
 }
 
 .transcription-dedicated {
-  flex: 0 0 auto;
-  min-height: 5.5rem;
-  max-height: 28vh;
+  min-height: 0;
+  max-height: none;
   display: flex;
   flex-direction: column;
   padding: 1rem 1.1rem;
@@ -378,7 +390,7 @@ body {
   overflow-y: auto;
   word-break: break-word;
   flex: 1;
-  min-height: 2.5rem;
+  min-height: 0;
 }
 
 .transcription-dedicated__meta {
@@ -403,9 +415,8 @@ body {
 }
 
 .video-panel--center {
-  flex: 1 1 42%;
-  min-height: 180px;
-  max-height: 38vh;
+  min-height: 0;
+  max-height: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -427,8 +438,8 @@ body {
 
 .video-frame {
   width: 100%;
-  flex: 1;
-  min-height: 160px;
+  flex: 1 1 auto;
+  min-height: 0;
   border: none;
   border-radius: 4px;
   background: #000;
@@ -444,6 +455,10 @@ body {
   border-radius: 8px;
   padding: 0.75rem;
   overflow: hidden;
+}
+
+.chat-page--embedded .chat-log {
+  scrollbar-gutter: stable;
 }
 
 .chat-page {
@@ -628,12 +643,20 @@ body {
     min-height: auto;
   }
 
+  .dashboard-center {
+    grid-template-rows:
+      minmax(260px, 42vh)
+      minmax(110px, auto)
+      minmax(110px, auto)
+      minmax(200px, 34vh);
+  }
+
   .chat-column {
     max-height: 420px;
   }
 
-  .map-section {
-    min-height: 260px;
+  .sidebar .robot-list {
+    max-height: 180px;
   }
 
   .servo-page {
