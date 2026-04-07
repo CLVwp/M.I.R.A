@@ -17,6 +17,10 @@ OLLAMA_URL = os.getenv("OLLAMA_URL", "http://100.68.211.25:11434/api/generate")
 MODEL_NAME = os.getenv("OLLAMA_MODEL", "mira")
 MODEL_PATH = os.getenv("VOSK_MODEL", "/app/model")
 NOISE_THRESHOLD = int(os.getenv("NOISE_THRESHOLD", "300"))
+MQTT_BROKER = os.getenv("MQTT_BROKER", "mira-mosquitto")
+MQTT_PORT = int(os.getenv("MQTT_PORT", "1883"))
+# Identifiant robot pour le dashboard (topic mira/robots/{id}/listening)
+ROBOT_ID = os.getenv("ROBOT_ID", "mira-robot")
 
 derniere_vision = "Rien à signaler"
 last_vision_time = 0.0
@@ -78,6 +82,21 @@ def ask_ollama(prompt):
         return r.json().get("response", "...")
     except Exception as e: return f"Erreur: {e}"
 
+def publish_listening(text: str):
+    """Remonte la transcription Vosk vers le dashboard (MQTT)."""
+    if not mqtt_client:
+        return
+    topic = f"mira/robots/{ROBOT_ID}/listening"
+    payload = json.dumps({
+        "text": text,
+        "ts": time.time(),
+        "source": "vosk",
+    })
+    try:
+        mqtt_client.publish(topic, payload, qos=0)
+    except Exception as e:
+        print(f"{C_RED}[MQTT] publish listening: {e}{C_RESET}")
+
 def process_text(text):
     text_lower = text.lower().strip()
     
@@ -129,7 +148,7 @@ def main():
         mqtt_client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2)
         mqtt_client.on_connect = on_mqtt_connect
         mqtt_client.on_message = on_mqtt_message
-        mqtt_client.connect("mira-mosquitto", 1883, 60)
+        mqtt_client.connect(MQTT_BROKER, MQTT_PORT, 60)
         mqtt_client.loop_start()
     except: pass
 
@@ -151,6 +170,7 @@ def main():
                 text = res.get("text", "")
                 if text:
                     print(f"{C_CYAN}[STT] \"{text}\"{C_RESET}")
+                    publish_listening(text)
                     process_text(text)
 
 if __name__ == "__main__":

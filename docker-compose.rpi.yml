@@ -1,0 +1,129 @@
+# Raspberry Pi — MQTT, audio, vision, bridge, agent dashboard.
+# Depuis ce dossier : docker compose -f docker-compose.rpi.yml up -d
+# Ollama sur le PC : définir OLLAMA_PC_HOST (fichier .env à la racine ou export) si ce n’est pas l’IP par défaut.
+
+name: mira-rpi
+
+services:
+  mira-mosquitto:
+    image: eclipse-mosquitto:latest
+    container_name: mira-mosquitto
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config/mosquitto.conf:/mosquitto/config/mosquitto.conf
+    networks:
+      - mira-network
+
+  mira-rpi-agent:
+    build: ./rpi-agent
+    container_name: mira-rpi-agent
+    restart: unless-stopped
+    environment:
+      - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - ROBOT_ID=${ROBOT_ID:-mira-robot}
+      - MOCK_GPS=${MOCK_GPS:-1}
+      - LAT=${LAT:-48.869867}
+      - LON=${LON:-2.307077}
+      - GPS_SERIAL=${GPS_SERIAL:-}
+      - GPS_BAUD=${GPS_BAUD:-9600}
+      - STREAM_URL=${RPI_STREAM_URL:-}
+      - ROBOT_DOCKER_CONTAINERS=mira-stt,mira-tts,mira-vision,mira-bridge,mira-mosquitto
+    # GPS USB: définir HOST_GPS_DEV dans .env (ex /dev/ttyUSB0 ou /dev/serial/by-id/...)
+    devices:
+      - ${HOST_GPS_DEV:-/dev/ttyUSB0}:/dev/gps0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - mira-network
+    depends_on:
+      - mira-mosquitto
+
+  mira-stt:
+    build: ./STT
+    container_name: mira-stt
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - "/dev/snd:/dev/snd"
+    environment:
+      - OLLAMA_URL=http://${OLLAMA_PC_HOST:-192.168.137.1}:${OLLAMA_PC_PORT:-11434}/api/generate
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-mira}
+      - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - ROBOT_ID=${ROBOT_ID:-mira-robot}
+    networks:
+      - mira-network
+    depends_on:
+      - mira-mosquitto
+
+  mira-vision:
+    build: ./vision
+    container_name: mira-vision
+    privileged: true
+    ports:
+      - "${VISION_MJPEG_PORT:-8080}:8080"
+    networks:
+      - mira-network
+    volumes:
+      - /dev:/dev
+      - /run/udev:/run/udev:ro
+      - /usr/share/imx500-models:/usr/share/imx500-models:ro
+      - /sys/kernel/debug:/sys/kernel/debug
+    environment:
+      - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - ROBOT_ID=${ROBOT_ID:-mira-robot}
+      - STREAM_MJPEG_ENABLE=${STREAM_MJPEG_ENABLE:-1}
+      - STREAM_MJPEG_PORT=8080
+      - STREAM_FRAME_MIN_INTERVAL_SEC=${STREAM_FRAME_MIN_INTERVAL_SEC:-0.04}
+      - STREAM_JPEG_QUALITY=${STREAM_JPEG_QUALITY:-72}
+      - STREAM_PREVIEW_MAX_WIDTH=${STREAM_PREVIEW_MAX_WIDTH:-960}
+      - VISION_LOOP_SLEEP_SEC=${VISION_LOOP_SLEEP_SEC:-0.05}
+      - STREAM_DRAW_DETECTIONS=${STREAM_DRAW_DETECTIONS:-1}
+    restart: always
+    depends_on:
+      - mira-mosquitto
+
+  mira-bridge:
+    build: ./bridge
+    container_name: mira-bridge
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - "${HOST_ESP32_DEV:-/dev/ttyUSB1}:/dev/esp32"
+    environment:
+      - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - UART_PORT=/dev/esp32
+      - UART_BAUD=115200
+    networks:
+      - mira-network
+    depends_on:
+      - mira-mosquitto
+
+  mira-tts:
+    build: ./TTS
+    container_name: mira-tts
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - "/dev/snd:/dev/snd"
+    environment:
+      - MQTT_BROKER=mira-mosquitto
+      - MQTT_PORT=1883
+      - PULSE_SERVER=unix:/run/user/1000/pulse/native
+    volumes:
+      - /run/user/1000/pulse:/run/user/1000/pulse
+      - ~/.config/pulse/cookie:/root/.config/pulse/cookie:ro
+    networks:
+      - mira-network
+    depends_on:
+      - mira-mosquitto
+
+networks:
+  mira-network:
+    name: mira-network
+    driver: bridge

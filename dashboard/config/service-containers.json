@@ -1,0 +1,19 @@
+{
+  "onDashboardHost": [
+    "mira-ollama"
+  ],
+  "onRobot": [
+    "mira-stt",
+    "mira-tts",
+    "mira-vision",
+    "mira-bridge"
+  ],
+  "labels": {
+    "mira-mosquitto": "MQTT (Mosquitto)",
+    "mira-ollama": "LLM (Ollama)",
+    "mira-stt": "STT (Vosk)",
+    "mira-tts": "TTS",
+    "mira-vision": "Vision",
+    "mira-bridge": "Bridge UART"
+  }
+}

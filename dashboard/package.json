@@ -1,0 +1,34 @@
+{
+  "name": "mira-dashboard",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.2.0",
+  "scripts": {
+    "dev": "bun run scripts/dev.ts",
+    "dev:server": "bun --hot src/server/index.ts",
+    "dev:client": "bun --bun vite",
+    "build": "bun run build:client && bun run build:server",
+    "build:client": "bun --bun vite build",
+    "build:server": "bun build src/server/index.ts --outfile dist/server/index.js --target bun --minify",
+    "start": "bun dist/server/index.js",
+    "migrate": "bun x --bun auth@latest migrate --config src/auth.ts"
+  },
+  "dependencies": {
+    "better-auth": "^1.2.0",
+    "hono": "^4.7.0",
+    "mqtt": "^5.10.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-leaflet": "^4.2.1",
+    "leaflet": "^1.9.4"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/leaflet": "^1.9.16",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.11"
+  }
+}
